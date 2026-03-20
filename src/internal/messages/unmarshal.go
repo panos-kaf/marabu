@@ -3,14 +3,20 @@ package messages
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 // Reusable compiled regexes for performance
 var (
 	versionRegex = regexp.MustCompile(`^0\.10\.[0-9]+$`)
-	peerRegex    = regexp.MustCompile(`^((?:\d{1,3}\.){3}\d{1,3}|\[[a-fA-F0-9:]+\]|[a-fA-F0-9:]+|[a-zA-Z0-9.-]+):[0-9]{1,5}$`)
+
+	// very loose peer regex
+	// peerRegex = regexp.MustCompile(`^(\[[a-fA-F0-9:]+\]|[a-fA-F0-9:]+|[a-zA-Z0-9.-]+):[0-9]{1,5}$`)
 )
 
 const maxArrLen = 1000
@@ -75,7 +81,6 @@ func (mt *MessageType) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid message type: '%s'", s)
 	}
 }
-
 func (v *T_Version) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -123,10 +128,10 @@ func (p *T_Peer) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return fmt.Errorf("invalid peer format: %w", err)
 	}
-	if !peerRegex.MatchString(s) {
-		return fmt.Errorf("invalid peer format: %s", s)
-	}
-	*p = T_Peer(s)
+
+	sanitized := sanitizePeer(s)
+	*p = sanitized
+
 	return nil
 }
 
@@ -284,6 +289,84 @@ func (arr *T_BuStrings) UnmarshalJSON(data []byte) error {
 func (arr *T_HashIDs) UnmarshalJSON(data []byte) error {
 	return UnmarshalArray(data, (*[]T_HashID)(arr), maxArrLen, "T_HashIDs")
 }
+
 func (arr *T_Peers) UnmarshalJSON(data []byte) error {
-	return UnmarshalArray(data, (*[]T_Peer)(arr), maxArrLen, "T_Peers")
+	var rawPeers []T_Peer
+	if err := json.Unmarshal(data, &rawPeers); err != nil {
+		return fmt.Errorf("invalid T_Peers array format: %w", err)
+	}
+	validPeers := make(T_Peers, 0, len(rawPeers))
+	for _, peer := range rawPeers {
+		if peer != PEER_INVALID {
+			validPeers = append(validPeers, peer)
+		}
+	}
+	*arr = validPeers
+	return nil
+}
+
+// Validate and sanitize peer address, returning PEER_INVALID if invalid
+func sanitizePeer(peer string) T_Peer {
+	peer = strings.TrimSpace(peer)
+	lastColon := strings.LastIndex(peer, ":")
+	if lastColon == -1 {
+		return PEER_INVALID
+	}
+	portStr := peer[lastColon+1:]
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		return PEER_INVALID
+	}
+	host := peer[:lastColon]
+
+	isv6 := false
+	// Remove brackets for IPv6
+	ipStr := host
+	if strings.HasPrefix(ipStr, "[") && strings.HasSuffix(ipStr, "]") {
+		ipStr = ipStr[1 : len(ipStr)-1]
+		isv6 = true
+	}
+	ip := net.ParseIP(ipStr)
+
+	if ip != nil {
+		// IPv4
+		if ip.To4() != nil && !isv6 {
+			if strings.HasPrefix(ipStr, "127.") || strings.HasPrefix(ipStr, "0.") ||
+				strings.HasPrefix(ipStr, "192.168.") || strings.HasPrefix(ipStr, "10.") {
+				log.Printf("Rejected peer %s: IPv4 address is loopback or private", peer)
+				return PEER_INVALID
+			}
+			octets := strings.Split(ipStr, ".")
+			if len(octets) != 4 {
+				log.Printf("Rejected peer %s: invalid IPv4 format", peer)
+				return PEER_INVALID
+			}
+			if strings.HasPrefix(ipStr, "172.") {
+				second, err := strconv.Atoi(octets[1])
+				if err != nil || second < 16 || second > 31 {
+					log.Printf("Rejected peer %s: invalid IPv4 octet", peer)
+					return PEER_INVALID
+				}
+			}
+			return T_Peer(peer)
+		}
+		// IPv6
+		if ip.To16() != nil && ip.To4() == nil {
+			if ipStr == "::1" || strings.HasPrefix(ipStr, "fe80:") || strings.HasPrefix(ipStr, "fc00:") {
+				log.Printf("Rejected peer %s: IPv6 address is loopback or link-local", peer)
+				return PEER_INVALID
+			}
+			return T_Peer(peer)
+		}
+	}
+
+	// Domain check (strict format, no DNS lookup)
+	if !isv6 {
+		domain := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
+		if domain.MatchString(host) && host != "localhost" {
+			return T_Peer(peer)
+		}
+	}
+
+	return PEER_INVALID
 }

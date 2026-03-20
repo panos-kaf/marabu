@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"marabu/internal/logs"
+	"marabu/internal/messages"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -60,8 +58,8 @@ func loadPeers() {
 
 // Save peers to file
 func savePeers() {
-	knownPeersMutex.Lock()
-	defer knownPeersMutex.Unlock()
+	// knownPeersMutex.Lock()
+	// defer knownPeersMutex.Unlock()
 	file, err := os.Create(PEERS_FILE)
 	if err != nil {
 		logs.GlobalLog(fmt.Sprintf("Failed to save peers file: %v", err))
@@ -72,7 +70,9 @@ func savePeers() {
 	defer w.Flush()
 	w.Write([]string{"Address", "Source"})
 	for peer, source := range knownPeers {
-		w.Write([]string{string(peer), string(source)})
+		if peer != messages.PEER_INVALID {
+			w.Write([]string{string(peer), string(source)})
+		}
 	}
 }
 
@@ -87,84 +87,23 @@ func GetKnownPeers() T_Peers {
 	return keys
 }
 
-// Validate and sanitize peer address
-func sanitizePeer(peer T_Peer) (T_Peer, bool) {
-
-	peerStr := strings.TrimSpace(string(peer))
-	ipv4 := regexp.MustCompile(`^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?):([0-9]{1,5})$`)
-	ipv6 := regexp.MustCompile(`^\[([a-fA-F0-9:]+)\]:([0-9]{1,5})$`)
-	domain := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}:([0-9]{1,5})$`)
-
-	isIPv4 := ipv4.MatchString(peerStr)
-	isIPv6 := ipv6.MatchString(peerStr)
-	isDomain := domain.MatchString(peerStr)
-
-	if !isIPv4 && !isIPv6 && !isDomain {
-		return "", false
-	}
-
-	lastColon := strings.LastIndex(peerStr, ":")
-	if lastColon == -1 {
-		return "", false
-	}
-	portStr := peerStr[lastColon+1:]
-	port, err := strconv.Atoi(portStr)
-	if err != nil || port <= 0 || port > 65535 {
-		return "", false
-	}
-	host := peerStr[:lastColon]
-
-	if isIPv6 {
-		if host == "::1" || host == "[::1]" ||
-			strings.HasPrefix(host, "[fe80:") || strings.HasPrefix(host, "[fc00:") {
-			return "", false
-		}
-	}
-	if host == "localhost" {
-		return "", false
-	}
-	if isIPv4 {
-		if strings.HasPrefix(host, "127.") || strings.HasPrefix(host, "0.") ||
-			strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "10.") {
-			return "", false
-		}
-		octets := strings.Split(host, ".")
-		if len(octets) != 4 {
-			return "", false
-		}
-		for _, octet := range octets {
-			num, err := strconv.Atoi(octet)
-			if err != nil || num < 0 || num > 255 {
-				return "", false
-			}
-		}
-		if strings.HasPrefix(host, "172.") {
-			second, err := strconv.Atoi(octets[1])
-			if err != nil || second < 16 || second > 31 {
-				return "", false
-			}
-		}
-	}
-	return T_Peer(peerStr), true
-}
-
 // Add new peers
 func AppendPeers(peers T_Peers, server string) {
 	knownPeersMutex.Lock()
 	defer knownPeersMutex.Unlock()
-	changed := false
+	newPeers := 0
 	for _, peer := range peers {
-		if sanitized, ok := sanitizePeer(peer); ok {
-			if _, exists := knownPeers[sanitized]; !exists {
-				knownPeers[sanitized] = server
-				logs.GlobalLog(fmt.Sprintf("Added new peer: %s from server %s", sanitized, server))
-				changed = true
-			}
+
+		if peer != messages.PEER_INVALID {
+			knownPeers[peer] = server
+			logs.GlobalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, server))
+			newPeers++
 		}
 	}
-	if changed {
-		logs.GlobalLog(fmt.Sprintf("Saving %d peers to disk...", len(knownPeers)))
+
+	if newPeers > 0 { // FIX NEW PEERS
 		savePeers()
+		logs.GlobalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
 	}
 }
 
@@ -175,7 +114,9 @@ func SelectRandomPeersPerSource(count int) []string {
 
 	peersBySource := make(map[string][]string)
 	for peer, source := range knownPeers {
-		peersBySource[source] = append(peersBySource[source], string(peer))
+		if peer != messages.PEER_INVALID {
+			peersBySource[source] = append(peersBySource[source], string(peer))
+		}
 	}
 	selected := []string{}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))

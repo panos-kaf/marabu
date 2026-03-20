@@ -39,11 +39,6 @@ func (g *GetPeersMessage) Validate() (error, ErrorCode) {
 
 func (p *PeersMessage) Validate() (error, ErrorCode) {
 	return nil, E_NONE
-	// Obsolete (?)
-	// peers, err, code := ValidatePeers(p.T_Peers)
-	// p.T_Peers = peers
-
-	// return err, code
 }
 
 func (g *GetObjectMessage) Validate() (error, ErrorCode) {
