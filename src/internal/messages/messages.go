@@ -52,6 +52,9 @@ const (
 	E_INVALID_BLOCK_TIMESTAMP ErrorCode = "INVALID_BLOCK_TIMESTAMP"
 	E_INVALID_BLOCK_POW       ErrorCode = "INVALID_BLOCK_POW"
 	E_INVALID_GENESIS         ErrorCode = "INVALID_GENESIS"
+
+	// Peer sanitization fail value
+	PEER_INVALID = ""
 )
 
 type (
