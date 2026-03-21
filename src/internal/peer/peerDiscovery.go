@@ -58,8 +58,6 @@ func loadPeers() {
 
 // Save peers to file
 func savePeers() {
-	// knownPeersMutex.Lock()
-	// defer knownPeersMutex.Unlock()
 	file, err := os.Create(PEERS_FILE)
 	if err != nil {
 		logs.GlobalLog(fmt.Sprintf("Failed to save peers file: %v", err))
@@ -88,20 +86,20 @@ func GetKnownPeers() T_Peers {
 }
 
 // Add new peers
-func AppendPeers(peers T_Peers, server string) {
+func AppendPeers(peers T_Peers, source string) {
 	knownPeersMutex.Lock()
 	defer knownPeersMutex.Unlock()
 	newPeers := 0
 	for _, peer := range peers {
-
 		if peer != messages.PEER_INVALID {
-			knownPeers[peer] = server
-			logs.GlobalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, server))
-			newPeers++
+			if _, exists := knownPeers[peer]; !exists {
+				newPeers++
+				knownPeers[peer] = source
+				logs.GlobalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, source))
+			}
 		}
 	}
-
-	if newPeers > 0 { // FIX NEW PEERS
+	if newPeers > 0 {
 		savePeers()
 		logs.GlobalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
 	}
