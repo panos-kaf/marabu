@@ -16,7 +16,12 @@ func (p *Peer) SendMessage(t MessageType, code ErrorCode, msg string, mkerr erro
 	if err != nil {
 		return fmt.Errorf("Failed to send %s message: %w", t, err)
 	}
-	p.logMessage(t, code, sent)
+	if t == MSG_ERROR {
+		p.logMessageErrorCode(code, sent)
+	} else {
+		p.logMessage(t, sent)
+	}
+
 	return nil
 }
 
@@ -32,7 +37,7 @@ func Broadcast(t MessageType, code ErrorCode, msg string, mkErr error) {
 	var hasErrors bool
 	for _, peer := range connectedPeers {
 		if err := peer.SendMessage(t, code, msg, nil); err != nil {
-			peer.logErr(MSG_NONE, fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, peer.addr, err))
+			peer.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, peer.addr, err))
 			hasErrors = true
 		}
 	}

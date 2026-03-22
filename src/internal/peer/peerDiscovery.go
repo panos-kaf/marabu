@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"marabu/internal/logs"
 	"marabu/internal/messages"
 	"math/rand"
 	"os"
@@ -60,7 +59,7 @@ func loadPeers() {
 func savePeers() {
 	file, err := os.Create(PEERS_FILE)
 	if err != nil {
-		logs.GlobalLog(fmt.Sprintf("Failed to save peers file: %v", err))
+		globalLog(fmt.Sprintf("Failed to save peers file: %v", err))
 		return
 	}
 	defer file.Close()
@@ -95,13 +94,15 @@ func AppendPeers(peers T_Peers, source string) {
 			if _, exists := knownPeers[peer]; !exists {
 				newPeers++
 				knownPeers[peer] = source
-				logs.GlobalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, source))
+				globalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, source))
 			}
 		}
 	}
 	if newPeers > 0 {
 		savePeers()
-		logs.GlobalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
+		globalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
+	} else {
+		globalLog("No new peers to add.")
 	}
 }
 

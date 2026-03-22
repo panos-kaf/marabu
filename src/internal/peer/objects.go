@@ -60,12 +60,12 @@ func (p *Peer) ValidateTransaction(tx *T_Transaction) (int, ErrorCode, error) {
 
 		exists, err := p.objectManager.Exists(outpoint.Txid)
 		if !exists || err != nil {
-			return 0, messages.E_UNKNOWN_OBJECT, fmt.Errorf("Referenced transaction %s for input %d does not exist", outpoint.Txid, i)
+			return 0, E_UNKNOWN_OBJECT, fmt.Errorf("Referenced transaction %s for input %d does not exist", outpoint.Txid, i)
 		}
 
 		obj, err := p.objectManager.Get(outpoint.Txid)
 		if err != nil {
-			return 0, messages.E_UNKNOWN_OBJECT, fmt.Errorf("Failed to fetch referenced transaction")
+			return 0, E_UNKNOWN_OBJECT, fmt.Errorf("Failed to fetch referenced transaction")
 		}
 
 		var outputs []messages.T_TxOutput
