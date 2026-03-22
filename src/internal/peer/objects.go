@@ -75,14 +75,16 @@ func (p *Peer) ValidateTransaction(tx *T_Transaction) (int, ErrorCode, error) {
 		case *T_CoinbaseTransaction:
 			outputs = txObj.Outputs
 		default:
-			return 0, messages.E_INTERNAL_ERROR, fmt.Errorf("Referenced object is of unknown type")
+			return 0, E_INTERNAL_ERROR, fmt.Errorf("Referenced object is of unknown type")
 		}
 
-		if outpoint.Index < 0 || int(outpoint.Index) >= len(outputs) {
-			return 0, messages.E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid output index")
+		idx := int(*outpoint.Index)
+
+		if idx < 0 || idx >= len(outputs) {
+			return 0, E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid output index")
 		}
 
-		output := outputs[outpoint.Index]
+		output := outputs[idx]
 		sumInputs += *output.Value
 
 		if input.Sig == nil {

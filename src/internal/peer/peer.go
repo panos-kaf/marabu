@@ -113,22 +113,24 @@ func (p *Peer) handleMessage(raw string) {
 
 	if err != nil {
 		p.logErr(MSG_NONE, "Invalid message: "+err.Error())
-		p.SendError(code, "Could not parse message as JSON: "+err.Error())
+		p.SendError(code, "Could not validate JSON message: "+err.Error())
 		if !p.handshakeComplete {
 			p.conn.Close()
 		}
 		return
 	}
 
-	if err, code := msg.Validate(); err != nil {
-		p.logMessageError(msg.MessageType(), code, "Message validation failed: "+err.Error(), false)
-		p.SendError(code, "Message validation failed: "+err.Error())
+	// Must only handle Object validation now.
 
-		if !p.handshakeComplete {
-			p.conn.Close()
-		}
-		return
-	}
+	// if err, code := msg.Validate(); err != nil {
+	// 	p.logMessageError(msg.MessageType(), code, "Message validation failed: "+err.Error(), false)
+	// 	p.SendError(code, "Message validation failed: "+err.Error())
+
+	// 	if !p.handshakeComplete {
+	// 		p.conn.Close()
+	// 	}
+	// 	return
+	// }
 
 	p.logMessage(msg.MessageType(), code, false)
 

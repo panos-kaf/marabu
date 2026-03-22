@@ -7,7 +7,9 @@ import (
 type (
 	Message interface {
 		MessageType() MessageType
-		Validate() (error, ErrorCode)
+
+		// schema validation now happens during unmarshaling
+		// Validate() (error, ErrorCode)
 	}
 
 	MessageType string

@@ -19,7 +19,10 @@ var (
 	// peerRegex = regexp.MustCompile(`^(\[[a-fA-F0-9:]+\]|[a-fA-F0-9:]+|[a-zA-Z0-9.-]+):[0-9]{1,5}$`)
 )
 
-const maxArrLen = 1000
+const (
+	maxArrLen = 1000
+	maxStrLen = 1000
+)
 
 func ValidateVersionString(val string) (error, ErrorCode) {
 
@@ -56,7 +59,11 @@ func UnmarshalMessage(raw string) (Message, error, ErrorCode) {
 	}
 
 	msgPtr := reflect.New(typ)
-	if err := json.Unmarshal([]byte(raw), msgPtr.Interface()); err != nil {
+
+	// use DisallowUnknownFields to catch extra fields that are not defined in the schemas
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(msgPtr.Interface()); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s message: %w", typeVal, err), E_INVALID_FORMAT
 	}
 
@@ -181,6 +188,54 @@ func (sig *T_Signature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (o *T_TxOutput) UnmarshalJSON(data []byte) error {
+	type Alias T_TxOutput
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(o),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("invalid TxOutput format: %w", err)
+	}
+	if o.Value == nil {
+		return fmt.Errorf("missing value field in TxOutput")
+	}
+	return nil
+}
+
+func (c *T_CoinbaseTransaction) UnmarshalJSON(data []byte) error {
+	type Alias T_CoinbaseTransaction
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("invalid CoinbaseTransaction format: %w", err)
+	}
+	if c.Height == nil {
+		return fmt.Errorf("missing height field in CoinbaseTransaction")
+	}
+	return nil
+}
+
+func (o *T_Outpoint) UnmarshalJSON(data []byte) error {
+	type Alias T_Outpoint
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(o),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("invalid Outpoint format: %w", err)
+	}
+	if o.Index == nil {
+		return fmt.Errorf("missing index field in Outpoint")
+	}
+	return nil
+}
+
 // Custom UnmarshalJSON for ObjectMessage to handle dynamic inner object types (block, transaction, coinbase transaction)
 func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 
@@ -260,18 +315,21 @@ func (s *T_BuString) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid string format: %w", err)
 	}
 
-	if len(str) > maxArrLen {
-		return fmt.Errorf("string exceeds maximum length of %d characters, got %d", maxArrLen, len(str))
+	if len(str) > maxStrLen {
+		return fmt.Errorf("string exceeds maximum length of %d characters, got %d", maxStrLen, len(str))
 	}
 	*s = T_BuString(str)
 	return nil
 }
 
 // Generic helper for unmarshaling arrays with length checks
-func UnmarshalArray[T any](data []byte, target *[]T, maxLen int, fieldName string) error {
+func UnmarshalArray[T any](data []byte, target *[]T, minLen int, maxLen int, fieldName string) error {
 	var arr []T
 	if err := json.Unmarshal(data, &arr); err != nil {
 		return fmt.Errorf("invalid %s array format: %w", fieldName, err)
+	}
+	if len(arr) < minLen {
+		return fmt.Errorf("%s array must have at least %d elements, got %d", fieldName, minLen, len(arr))
 	}
 	if len(arr) > maxLen {
 		return fmt.Errorf("%s array exceeds maximum length of %d elements, got %d", fieldName, maxLen, len(arr))
@@ -281,13 +339,19 @@ func UnmarshalArray[T any](data []byte, target *[]T, maxLen int, fieldName strin
 }
 
 func (arr *T_BuInts) UnmarshalJSON(data []byte) error {
-	return UnmarshalArray(data, (*[]T_BuInt)(arr), maxArrLen, "T_BuInts")
+	return UnmarshalArray(data, (*[]T_BuInt)(arr), 0, maxArrLen, "T_BuInts")
 }
 func (arr *T_BuStrings) UnmarshalJSON(data []byte) error {
-	return UnmarshalArray(data, (*[]T_BuString)(arr), maxArrLen, "T_BuStrings")
+	return UnmarshalArray(data, (*[]T_BuString)(arr), 0, maxArrLen, "T_BuStrings")
 }
 func (arr *T_HashIDs) UnmarshalJSON(data []byte) error {
-	return UnmarshalArray(data, (*[]T_HashID)(arr), maxArrLen, "T_HashIDs")
+	return UnmarshalArray(data, (*[]T_HashID)(arr), 0, maxArrLen, "T_HashIDs")
+}
+func (arr *T_TxInputs) UnmarshalJSON(data []byte) error {
+	return UnmarshalArray(data, (*[]T_TxInput)(arr), 1, maxArrLen, "T_TxInputs")
+}
+func (arr *T_TxOutputs) UnmarshalJSON(data []byte) error {
+	return UnmarshalArray(data, (*[]T_TxOutput)(arr), 0, maxArrLen, "T_TxOutputs")
 }
 
 func (arr *T_Peers) UnmarshalJSON(data []byte) error {
