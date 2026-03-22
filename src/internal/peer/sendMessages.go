@@ -16,11 +16,8 @@ func (p *Peer) SendMessage(t MessageType, code ErrorCode, msg string, mkerr erro
 	if err != nil {
 		return fmt.Errorf("Failed to send %s message: %w", t, err)
 	}
-	if t == MSG_ERROR {
-		p.logMessageErrorCode(code, sent)
-	} else {
-		p.logMessage(t, sent)
-	}
+
+	p.logMessage(t, code, sent)
 
 	return nil
 }

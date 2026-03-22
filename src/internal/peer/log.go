@@ -56,22 +56,9 @@ func (p *Peer) errInfo(message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) log(mtype MessageType, message string) {
+func (p *Peer) log(mtype MessageType, code ErrorCode, message string) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
-		ErrorCode:   E_NONE,
-		ID:          p.ID,
-		Addr:        p.addr,
-		IsError:     false,
-		Message:     message,
-		Role:        p.role,
-	}
-	logs.Log(entry)
-}
-
-func (p *Peer) logErrorCode(code ErrorCode, message string) {
-	entry := logs.LogEntry{
-		MessageType: MSG_ERROR,
 		ErrorCode:   code,
 		ID:          p.ID,
 		Addr:        p.addr,
@@ -82,22 +69,9 @@ func (p *Peer) logErrorCode(code ErrorCode, message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) err(mtype MessageType, message string) {
+func (p *Peer) err(mtype MessageType, code ErrorCode, message string) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
-		ErrorCode:   E_NONE,
-		ID:          p.ID,
-		Addr:        p.addr,
-		IsError:     true,
-		Message:     message,
-		Role:        p.role,
-	}
-	logs.Log(entry)
-}
-
-func (p *Peer) errErrorCode(code ErrorCode, message string) {
-	entry := logs.LogEntry{
-		MessageType: MSG_ERROR,
 		ErrorCode:   code,
 		ID:          p.ID,
 		Addr:        p.addr,
@@ -108,10 +82,10 @@ func (p *Peer) errErrorCode(code ErrorCode, message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) logMessage(mtype MessageType, sends bool) {
+func (p *Peer) logMessage(mtype MessageType, code ErrorCode, sends bool) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
-		ErrorCode:   E_NONE,
+		ErrorCode:   code,
 		ID:          p.ID,
 		Addr:        p.addr,
 		IsError:     false,
@@ -126,44 +100,9 @@ func (p *Peer) logMessage(mtype MessageType, sends bool) {
 	logs.Log(entry)
 }
 
-func (p *Peer) errMessage(mtype MessageType, message string, sends bool) {
+func (p *Peer) errMessage(mtype MessageType, code ErrorCode, message string, sends bool) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
-		ErrorCode:   E_NONE,
-		ID:          p.ID,
-		Addr:        p.addr,
-		IsError:     true,
-		Message:     message,
-		Role:        p.role,
-	}
-	if sends {
-		entry.Direction = "sent"
-	} else {
-		entry.Direction = "received"
-	}
-	logs.Log(entry)
-}
-
-func (p *Peer) logMessageErrorCode(code ErrorCode, sends bool) {
-	entry := logs.LogEntry{
-		MessageType: MSG_ERROR,
-		ErrorCode:   code,
-		ID:          p.ID,
-		Addr:        p.addr,
-		IsError:     true,
-		Role:        p.role,
-	}
-	if sends {
-		entry.Direction = "sent"
-	} else {
-		entry.Direction = "received"
-	}
-	logs.Log(entry)
-}
-
-func (p *Peer) errMessageErrorCode(code ErrorCode, message string, sends bool) {
-	entry := logs.LogEntry{
-		MessageType: MSG_ERROR,
 		ErrorCode:   code,
 		ID:          p.ID,
 		Addr:        p.addr,

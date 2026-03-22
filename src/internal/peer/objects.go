@@ -18,21 +18,21 @@ func (p *Peer) ValidateObject(obj Object) (ErrorCode, error) {
 		if err != nil {
 			return errorCode, fmt.Errorf("Validation failed for transaction %s: %v", objID, err)
 		}
-		p.log(MSG_OBJECT, fmt.Sprintf("T_Transaction %s is valid with fee %d", objID, fee))
+		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("T_Transaction %s is valid with fee %d", objID, fee))
 		return E_NONE, nil
 	case *T_CoinbaseTransaction:
 		fee, errorCode, err := p.ValidateCoinbase(o)
 		if err != nil {
 			return errorCode, fmt.Errorf("Validation failed for coinbase transaction %s: %v", objID, err)
 		}
-		p.log(MSG_OBJECT, fmt.Sprintf("Coinbase transaction %s is valid with fee %d", objID, fee))
+		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("Coinbase transaction %s is valid with fee %d", objID, fee))
 		return E_NONE, nil
 	case *T_Block:
 		errorCode, err := p.ValidateBlock(o)
 		if err != nil {
 			return errorCode, fmt.Errorf("Validation failed for block %s: %v", objID, err)
 		}
-		p.log(MSG_OBJECT, fmt.Sprintf("T_Block %s is valid", objID))
+		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("T_Block %s is valid", objID))
 		return E_NONE, nil
 	default:
 		return E_INTERNAL_ERROR, fmt.Errorf("Unknown object type: %T", obj)
