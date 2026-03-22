@@ -57,6 +57,8 @@ const (
 
 	// Peer sanitization fail value
 	PEER_INVALID = ""
+
+	TARGET = T_HashID("00000000abc00000000000000000000000000000000000000000000000000000")
 )
 
 type (

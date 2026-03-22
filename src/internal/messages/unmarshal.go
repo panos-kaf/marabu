@@ -43,19 +43,19 @@ var messageTypeRegistry = map[string]reflect.Type{
 	string(MSG_CHAINTIP):    reflect.TypeOf(ChainTipMessage{}),
 }
 
-func UnmarshalMessage(raw string) (Message, error, ErrorCode) {
+func UnmarshalMessage(raw string) (Message, error) {
 	var probe map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
-		return nil, fmt.Errorf("invalid JSON format: %w", err), E_INVALID_FORMAT
+		return nil, fmt.Errorf("invalid JSON format: %w", err)
 	}
 	typeVal, ok := probe["type"].(string)
 	if !ok {
-		return nil, fmt.Errorf("missing or invalid 'type' field in message"), E_INVALID_FORMAT
+		return nil, fmt.Errorf("missing or invalid 'type' field in message")
 	}
 
 	typ, found := messageTypeRegistry[typeVal]
 	if !found {
-		return nil, fmt.Errorf("unknown message type: '%s'", typeVal), E_INVALID_FORMAT
+		return nil, fmt.Errorf("unknown message type: '%s'", typeVal)
 	}
 
 	msgPtr := reflect.New(typ)
@@ -64,14 +64,14 @@ func UnmarshalMessage(raw string) (Message, error, ErrorCode) {
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(msgPtr.Interface()); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal %s message: %w", typeVal, err), E_INVALID_FORMAT
+		return nil, fmt.Errorf("failed to unmarshal %s message: %w", typeVal, err)
 	}
 
 	// Return as Message interface
 	if m, ok := msgPtr.Interface().(Message); ok {
-		return m, nil, E_NONE
+		return m, nil
 	}
-	return nil, fmt.Errorf("type %s does not implement Message interface", typeVal), E_INVALID_FORMAT
+	return nil, fmt.Errorf("type %s does not implement Message interface", typeVal)
 }
 
 // Custom UnmarshalJSON for MessageType to enforce valid message types
@@ -264,6 +264,10 @@ func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 		var b T_Block
 		if err := json.Unmarshal(o.RawObject, &b); err != nil {
 			return fmt.Errorf("failed to unmarshal block object: %w", err)
+		}
+
+		if b.T != TARGET {
+			return fmt.Errorf("invalid block object: T field does not match marabu target")
 		}
 		o.Object = &b
 
