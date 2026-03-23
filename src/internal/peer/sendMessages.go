@@ -106,3 +106,54 @@ func (p *Peer) Greet() {
 	p.SendHello()
 	p.SendGetPeers()
 }
+
+
+// -- Top level broadcast functions for each message type --
+
+func BroadcastHello() {
+	Broadcast(MSG_HELLO, E_NONE, "Broadcasting hello message to all peers", nil)
+}
+
+func BroadcastGetPeers() {
+	Broadcast(MSG_GETPEERS, E_NONE, "Broadcasting getpeers message to all peers", nil)
+}
+
+func BroadcastPeers(peers T_Peers) {
+	msg, err := messages.MakePeersMessage(peers)
+	Broadcast(MSG_PEERS, E_NONE, msg, err)
+}
+
+func BroadcastGetObject(objectID T_HashID) {
+	msg, err := messages.MakeGetObjectMessage(objectID)
+	Broadcast(MSG_GETOBJECT, E_NONE, msg, err)
+}
+
+func BroadcastIHaveObject(objectID T_HashID) {
+	msg, err := messages.MakeIHaveObjectMessage(objectID)
+	Broadcast(MSG_IHAVEOBJECT, E_NONE, msg, err)
+}
+
+func BroadcastObject(obj messages.Object) {
+	msg, err := messages.MakeObjectMessage(obj)
+	Broadcast(MSG_OBJECT, E_NONE, msg, err)
+}
+
+func BroadcastGetMempool() {
+	msg, err := messages.MakeGetMempoolMessage()
+	Broadcast(MSG_GETMEMPOOL, E_NONE, msg, err)
+}
+
+func BroadcastMempool(txIDs []T_HashID) {
+	msg, err := messages.MakeMempoolMessage(txIDs)
+	Broadcast(MSG_MEMPOOL, E_NONE, msg, err)
+}
+
+func BroadcastGetChainTip() {
+	msg, err := messages.MakeGetChainTipMessage()
+	Broadcast(MSG_GETCHAINTIP, E_NONE, msg, err)
+}
+
+func BroadcastChainTip(chainTip T_HashID) {
+	msg, err := messages.MakeChainTipMessage(chainTip)
+	Broadcast(MSG_CHAINTIP, E_NONE, msg, err)
+}
