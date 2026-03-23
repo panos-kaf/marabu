@@ -1,8 +1,6 @@
 package peer
 
 import (
-	"marabu/internal/crypto"
-	"marabu/internal/messages"
 	"strconv"
 )
 
@@ -16,7 +14,7 @@ func (p *Peer) handleHello(msg *HelloMessage) {
 }
 
 func (p *Peer) handleError(msg *ErrorMessage) {
-	p.log(msg.Type, msg.Name, " peer: "+p.addr+", description: "+string(msg.Description))
+	p.log(msg.Type, msg.Name, "peer: "+p.addr+", description: "+string(msg.Description))
 }
 
 func (p *Peer) handleGetPeers() {
@@ -60,7 +58,7 @@ func (p *Peer) handleGetObject(msg *GetObjectMessage) {
 			p.err(mtype, E_NONE, "Error sending object: "+err.Error())
 		}
 	} else {
-		p.log(mtype, E_NONE, "We do not have object "+string(ID)+", cannot fulfill MSG_GETOBJECT request from peer "+p.addr)
+		p.log(mtype, E_NONE, "We do not have object "+string(ID)+", cannot fulfill getobject request from peer "+p.addr)
 		p.SendError(E_UNKNOWN_OBJECT, "Object not found: "+string(ID))
 	}
 }
@@ -81,54 +79,57 @@ func (p *Peer) handleIHaveObject(msg *IHaveObjectMessage) {
 		p.log(msg.Type, E_NONE, "We do not have object "+string(ID)+", requesting it from peer "+p.addr)
 		err := p.SendGetObject(ID)
 		if err != nil {
-			p.err(msg.Type, E_NONE, "Error sending MSG_GETOBJECT: "+err.Error())
+			p.err(msg.Type, E_NONE, "Error sending getobject: "+err.Error())
 		}
 	}
 }
 
 func (p *Peer) handleObject(msg *ObjectMessage) {
 
-	errorCode, err := p.ValidateObject(msg.Object)
+	objID, errorCode, err := p.ValidateObject(msg.Object)
 	if err != nil {
 		p.err(msg.Type, E_NONE, "Received invalid object from peer "+p.addr+": "+err.Error())
 		p.SendError(errorCode, "Invalid object: "+err.Error())
 		return
 	}
 
-	ID, err := crypto.HashObject(msg.Object)
-	if err != nil {
-		p.err(msg.Type, E_NONE, "Error hashing object: "+err.Error())
-		return
-	}
+	objIDstr := string(objID)
+	p.log(msg.Type, E_NONE, "Received Object with ID "+objIDstr+" from peer: "+p.addr)
 
-	hashID := T_HashID(ID)
-
-	p.log(msg.Type, E_NONE, "Received MSG_OBJECT with ID "+ID+" from peer: "+p.addr)
-
-	exists, err := p.objectManager.Exists(hashID)
+	exists, err := p.objectManager.Exists(objID)
 	if err != nil {
 		p.err(msg.Type, E_NONE, "Error checking if object exists: "+err.Error())
 		return
 	}
+
 	if exists {
-		p.log(msg.Type, E_NONE, "We already have object "+ID+", ignoring received object.")
+		p.log(msg.Type, E_NONE, "We already have object "+objIDstr+", ignoring received object.")
 	} else {
-		p.log(msg.Type, E_NONE, "Storing new object with ID "+ID)
+		p.log(msg.Type, E_NONE, "Storing new object with ID "+objIDstr)
 
 		_, err := p.objectManager.Put(msg.Object)
 		if err != nil {
 			p.err(msg.Type, E_NONE, "Error storing object: "+err.Error())
 			return
 		}
-		p.log(msg.Type, E_NONE, "Object stored successfully with ID "+ID)
+		p.log(msg.Type, E_NONE, "Object stored successfully with ID "+objIDstr)
+
+		// Notify pending blocks that this object is now available
+		pendingBlocks := p.objectManager.PendingBlocks[objID]
+		for _, block := range pendingBlocks {
+			o := block.Block
+			if _, code, err := p.ValidateObject(o); code == E_NONE && err == nil {
+				p.log(MSG_OBJECT, E_NONE, "Pending block "+objIDstr+" is now valid with new object "+objIDstr)
+				_, err := p.objectManager.Put(o)
+				if err != nil {
+					p.err(MSG_OBJECT, E_NONE, "Error storing pending block: "+err.Error())
+				}
+			}
+		}
+		delete(p.objectManager.PendingBlocks, objID)
 
 		// gossip!
-		advertisement, err := messages.MakeIHaveObjectMessage(hashID)
-		if err != nil {
-			p.err(msg.Type, E_NONE, "Error creating MSG_IHAVEOBJECT message: "+err.Error())
-			return
-		}
-		Broadcast(MSG_IHAVEOBJECT, E_NONE, advertisement, err)
+		BroadcastIHaveObject(objID)
 	}
 }
 

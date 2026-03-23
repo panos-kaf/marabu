@@ -3,6 +3,7 @@ package object
 import (
 	"marabu/internal/crypto"
 	"marabu/internal/messages"
+	"time"
 
 	"encoding/json"
 	"fmt"
@@ -13,10 +14,18 @@ import (
 
 type T_HashID = messages.T_HashID
 
+type PendingBlock struct {
+	Block     *messages.T_Block
+	Timestamp time.Time
+	Peer      string
+}
+
 type ObjectManager struct {
 	db           *leveldb.DB
 	pendingFinds map[T_HashID][]chan messages.Object
 	mutex        sync.Mutex
+
+	PendingBlocks map[T_HashID][]PendingBlock
 }
 
 func NewObjectManager(path string) (*ObjectManager, error) {
@@ -25,8 +34,9 @@ func NewObjectManager(path string) (*ObjectManager, error) {
 		return nil, err
 	}
 	return &ObjectManager{
-		db:           db,
-		pendingFinds: make(map[T_HashID][]chan messages.Object),
+		db:            db,
+		pendingFinds:  make(map[T_HashID][]chan messages.Object),
+		PendingBlocks: make(map[T_HashID][]PendingBlock),
 	}, nil
 }
 
@@ -137,4 +147,52 @@ func (om *ObjectManager) notifyWaiters(id T_HashID, obj messages.Object) {
 		close(ch)
 	}
 	delete(om.pendingFinds, id)
+}
+
+func (om *ObjectManager) AddPendingBlock(id T_HashID, peer string, block *messages.T_Block) {
+	om.mutex.Lock()
+	defer om.mutex.Unlock()
+	om.PendingBlocks[id] = append(om.PendingBlocks[id], PendingBlock{
+		Block:     block,
+		Timestamp: time.Now(),
+		Peer:      peer,
+	})
+}
+
+func (om *ObjectManager) CheckPendingBlocks() []struct {
+	Peer  string
+	Block *messages.T_Block
+	Txid  T_HashID
+} {
+	om.mutex.Lock()
+	defer om.mutex.Unlock()
+	now := time.Now()
+	var expired []struct {
+		Peer  string
+		Block *messages.T_Block
+		Txid  T_HashID
+	}
+
+	timeout := 5 * time.Second
+
+	for txid, blocks := range om.PendingBlocks {
+		var stillPending []PendingBlock
+		for _, blk := range blocks {
+			if now.Sub(blk.Timestamp) > timeout {
+				expired = append(expired, struct {
+					Peer  string
+					Block *messages.T_Block
+					Txid  T_HashID
+				}{blk.Peer, blk.Block, txid})
+			} else {
+				stillPending = append(stillPending, blk)
+			}
+		}
+		if len(stillPending) == 0 {
+			delete(om.PendingBlocks, txid)
+		} else {
+			om.PendingBlocks[txid] = stillPending
+		}
+	}
+	return expired
 }
