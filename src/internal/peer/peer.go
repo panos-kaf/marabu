@@ -3,13 +3,13 @@ package peer
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"marabu/internal/messages"
 	"marabu/internal/object"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -24,7 +24,7 @@ type Peer struct {
 	ID                int
 	buffer            []byte
 	handshakeComplete bool
-	onDisconnect      func()
+	done              chan struct{}
 	role              string
 	objectManager     *object.ObjectManager
 }
@@ -43,6 +43,7 @@ func NewPeer(conn net.Conn,
 		buffer:        make([]byte, 0),
 		role:          role,
 		objectManager: objectManager,
+		done:          make(chan struct{}),
 	}
 
 	connectedPeersMutex.Lock()
@@ -53,7 +54,23 @@ func NewPeer(conn net.Conn,
 
 	go p.initializeSocket()
 
+	// Start a routine to check for unfindable objects every 2 seconds
+	go p.Routine(2*time.Second, func() { p.NotifyUnfindableObject() })
+
 	return p
+}
+
+func (p *Peer) Routine(interval time.Duration, fn func()) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			fn()
+		case <-p.done:
+			return
+		}
+	}
 }
 
 // initializeSocket starts a goroutine to read messages from the peer's connection.
@@ -64,21 +81,35 @@ func (p *Peer) initializeSocket() {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-
-			connectedPeersMutex.Lock()
-			delete(connectedPeers, p.addr)
-			connectedPeersMutex.Unlock()
-
-			if err != io.EOF {
-				p.errInfo("Disconnected: " + err.Error())
-				return
-			}
-			if p.onDisconnect != nil {
-				p.onDisconnect()
-				return
-			}
+			p.disconnect()
+			return
 		}
 		p.handleMessage(line)
+	}
+}
+
+func (p *Peer) disconnect() {
+	select {
+	case <-p.done:
+		// already closed, do nothing
+		return
+	default:
+		close(p.done)
+	}
+
+	connectedPeersMutex.Lock()
+	delete(connectedPeers, p.addr)
+	connectedPeersMutex.Unlock()
+
+	p.conn.Close()
+
+	switch p.role {
+	case "client":
+		p.logInfo("Disconnected from server at " + p.addr)
+	case "server":
+		p.logInfo("Client at " + p.addr + " disconnected")
+	default:
+		p.logInfo("Peer at " + p.addr + " disconnected")
 	}
 }
 
@@ -100,7 +131,7 @@ func (p *Peer) handleMessage(raw string) {
 		p.errInfo("Invalid message: " + err.Error())
 		p.SendError(E_INVALID_FORMAT, "Could not validate JSON message: "+err.Error())
 		if !p.handshakeComplete {
-			p.conn.Close()
+			p.disconnect()
 		}
 		return
 	}
@@ -114,7 +145,7 @@ func (p *Peer) handleMessage(raw string) {
 	if !p.handshakeComplete && msg.MessageType() != messages.MSG_HELLO {
 		p.errMessage(msg.MessageType(), E_NONE, "Failed handshake.Expected hello message first", false)
 		p.SendError(messages.E_INVALID_HANDSHAKE, "Handshake not completed, expected hello message but received "+string(msg.MessageType()))
-		p.conn.Close()
+		p.disconnect()
 		return
 	}
 
@@ -145,7 +176,7 @@ func (p *Peer) handleMessage(raw string) {
 	default:
 		p.errInfo("Unknown message type")
 		p.SendError(messages.E_INVALID_FORMAT, "Unknown protocol message")
-		p.conn.Close()
+		p.disconnect()
 	}
 }
 
@@ -168,8 +199,6 @@ func StartServer(port int, objectManager *object.ObjectManager) error {
 
 		p := NewPeer(conn, "server", objectManager)
 
-		p.onDisconnect = func() { p.logInfo(fmt.Sprintf("Client at %s disconnected", addr)) }
-
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
 		p.Greet()
@@ -188,8 +217,6 @@ func StartClient(host string, port int, objectManager *object.ObjectManager, onC
 	}
 
 	p := NewPeer(conn, "client", objectManager)
-
-	p.onDisconnect = func() { p.logInfo(fmt.Sprintf("Disconnected from server at %s", p.addr)) }
 
 	p.logInfo(fmt.Sprintf("Connected to server at %s:%d", host, port))
 
