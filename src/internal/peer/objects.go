@@ -7,35 +7,42 @@ import (
 	"fmt"
 )
 
-func (p *Peer) ValidateObject(obj Object) (ErrorCode, error) {
-	objID, err := crypto.HashObject(obj)
+func (p *Peer) ValidateObject(obj Object) (T_HashID, ErrorCode, error) {
+
+	objIDstr, err := crypto.HashObject(obj)
 	if err != nil {
-		return E_INTERNAL_ERROR, fmt.Errorf("Failed to hash object for validation: %v", err)
+		return T_HashID(""), E_INTERNAL_ERROR, fmt.Errorf("Failed to hash object for validation: %v", err)
 	}
+	objID := T_HashID(objIDstr)
+
 	switch o := obj.(type) {
 	case *T_Transaction:
 		fee, errorCode, err := p.ValidateTransaction(o)
 		if err != nil {
-			return errorCode, fmt.Errorf("Validation failed for transaction %s: %v", objID, err)
+			return objID, errorCode, fmt.Errorf("Validation failed for transaction %s: %v", objID, err)
 		}
 		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("T_Transaction %s is valid with fee %d", objID, fee))
-		return E_NONE, nil
+		return objID, E_NONE, nil
+
 	case *T_CoinbaseTransaction:
 		fee, errorCode, err := p.ValidateCoinbase(o)
 		if err != nil {
-			return errorCode, fmt.Errorf("Validation failed for coinbase transaction %s: %v", objID, err)
+			return objID, errorCode, fmt.Errorf("Validation failed for coinbase transaction %s: %v", objID, err)
 		}
 		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("Coinbase transaction %s is valid with fee %d", objID, fee))
-		return E_NONE, nil
+		return objID, E_NONE, nil
+
 	case *T_Block:
 		errorCode, err := p.ValidateBlock(o)
 		if err != nil {
-			return errorCode, fmt.Errorf("Validation failed for block %s: %v", objID, err)
+			return objID, errorCode, fmt.Errorf("Validation failed for block %s: %v", objID, err)
 		}
 		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("T_Block %s is valid", objID))
-		return E_NONE, nil
+		return objID, E_NONE, nil
+
 	default:
-		return E_INTERNAL_ERROR, fmt.Errorf("Unknown object type: %T", obj)
+		return objID, E_INTERNAL_ERROR, fmt.Errorf("Unknown object type: %T", obj)
+
 	}
 }
 
@@ -125,5 +132,53 @@ func (p *Peer) ValidateCoinbase(cb *T_CoinbaseTransaction) (int, ErrorCode, erro
 }
 
 func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
+
+	blockid, err := crypto.HashObject(blk)
+	if err != nil {
+		return E_INTERNAL_ERROR, fmt.Errorf("Failed to hash block for validation: %v", err)
+	}
+
+	isValid, err := crypto.VerifyPoW(blockid)
+	if err != nil {
+		return E_INTERNAL_ERROR, fmt.Errorf("Failed to verify PoW for block %s: %v", blockid, err)
+	}
+	if !isValid {
+		return E_INVALID_BLOCK_POW, fmt.Errorf("Invalid PoW for block %s", blockid)
+	}
+
+	// missingTxs := make([]T_HashID, 0)
+	missingTxs := false
+
+	for _, txid := range blk.Txids {
+		exists, err := p.objectManager.Exists(txid)
+		if err != nil {
+			return E_INTERNAL_ERROR, fmt.Errorf("Error checking existence of transaction %s: %v", txid, err)
+		}
+		if !exists {
+			missingTxs = true
+			p.objectManager.AddPendingBlock(txid, p.addr, blk)
+			BroadcastGetObject(txid)
+			// return E_UNKNOWN_OBJECT, fmt.Errorf("Transaction %s not found. Asked peers for it", txid)
+		}
+	}
+
+	if missingTxs {
+		return E_UNKNOWN_OBJECT, fmt.Errorf("Block references transactions we don't have. Asked peers for them")
+	}
+
 	return E_NONE, nil
+}
+
+func (p *Peer) NotifyUnfindableObject() {
+
+	// p.log(MSG_NONE, E_NONE, "Checking for unfindable objects...")
+
+	expiredBlocks := p.objectManager.CheckPendingBlocks()
+
+	for _, expired := range expiredBlocks {
+		id := expired.Peer
+		if id == p.addr {
+			p.SendError(E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
+		}
+	}
 }
