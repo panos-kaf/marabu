@@ -3,9 +3,20 @@ package crypto
 import (
 	"fmt"
 	"marabu/internal/messages"
+	"math/big"
 
 	"golang.org/x/crypto/blake2s"
 )
+
+const (
+	TARGET_HEX = "00000000abc00000000000000000000000000000000000000000000000000000"
+)
+
+var TARGET = func() *big.Int {
+	n := new(big.Int)
+	n.SetString(TARGET_HEX, 16)
+	return n
+}
 
 // Hash computes the BLAKE2s hash of the input data and returns it as a hexadecimal string.
 func Hash(data []byte) (string, error) {
@@ -38,4 +49,17 @@ func HashObject(o messages.Object) (string, error) {
 		return "", err
 	}
 	return hash, nil
+}
+
+func VerifyPoW(data string) (bool, error) {
+
+	hash, err := HashString(data)
+	if err != nil {
+		return false, err
+	}
+
+	hashInt := new(big.Int)
+	hashInt.SetString(hash, 16)
+
+	return hashInt.Cmp(TARGET()) == -1, nil
 }
