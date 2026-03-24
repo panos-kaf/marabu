@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"marabu/internal/messages"
-	"marabu/internal/object"
+	"marabu/internal/objectManager"
 	"net"
 	"strconv"
 	"strings"
@@ -26,7 +26,7 @@ type Peer struct {
 	handshakeComplete bool
 	done              chan struct{}
 	role              string
-	objectManager     *object.ObjectManager
+	objectManager     *objectManager.ObjectManager
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -34,7 +34,7 @@ type Peer struct {
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
 	role string,
-	objectManager *object.ObjectManager) *Peer {
+	objectManager *objectManager.ObjectManager) *Peer {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
@@ -55,7 +55,7 @@ func NewPeer(conn net.Conn,
 	go p.initializeSocket()
 
 	// Start a routine to check for unfindable objects every 2 seconds
-	go p.Routine(2*time.Second, func() { p.NotifyUnfindableObject() })
+	// go p.Routine(2*time.Second, func() { p.NotifyUnfindableObject() })
 
 	return p
 }
@@ -69,6 +69,26 @@ func (p *Peer) Routine(interval time.Duration, fn func()) {
 			fn()
 		case <-p.done:
 			return
+		}
+	}
+}
+
+func CleanupPendingBlocks(om *objectManager.ObjectManager) {
+	ticker := time.NewTicker(2 * time.Second)
+
+	for range ticker.C {
+		expiredBlocks := om.CheckPendingBlocks()
+
+		for _, expired := range expiredBlocks {
+
+			connectedPeersMutex.Lock()
+			expiredPeer, exists := connectedPeers[expired.Peer]
+			connectedPeersMutex.Unlock()
+
+			if exists {
+				expiredPeer.SendError(E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
+				expiredPeer.log(MSG_ERROR, E_UNFINDABLE_OBJECT, fmt.Sprintf("Pending block with txid %s is unfindable. Notifying peer %s", expired.Txid, expired.Peer))
+			}
 		}
 	}
 }
@@ -180,7 +200,7 @@ func (p *Peer) handleMessage(raw string) {
 	}
 }
 
-func StartServer(port int, objectManager *object.ObjectManager) error {
+func StartServer(port int, objectManager *objectManager.ObjectManager) error {
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
@@ -205,14 +225,11 @@ func StartServer(port int, objectManager *object.ObjectManager) error {
 	}
 }
 
-func StartClient(host string, port int, objectManager *object.ObjectManager, onClose func()) error {
+func StartClient(host string, port int, objectManager *objectManager.ObjectManager) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		// if onClose != nil {
-		// 	onClose()
-		// }
 		return err
 	}
 

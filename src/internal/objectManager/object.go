@@ -1,4 +1,4 @@
-package object
+package objectManager
 
 import (
 	"marabu/internal/crypto"
@@ -149,10 +149,11 @@ func (om *ObjectManager) notifyWaiters(id T_HashID, obj messages.Object) {
 	delete(om.pendingFinds, id)
 }
 
-func (om *ObjectManager) AddPendingBlock(id T_HashID, peer string, block *messages.T_Block) {
+// peer received a block that waits for object with id missingID.
+func (om *ObjectManager) AddPendingBlock(peer string, missingID T_HashID, block *messages.T_Block) {
 	om.mutex.Lock()
 	defer om.mutex.Unlock()
-	om.PendingBlocks[id] = append(om.PendingBlocks[id], PendingBlock{
+	om.PendingBlocks[missingID] = append(om.PendingBlocks[missingID], PendingBlock{
 		Block:     block,
 		Timestamp: time.Now(),
 		Peer:      peer,

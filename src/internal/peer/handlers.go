@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"fmt"
 	"strconv"
 )
 
@@ -105,25 +106,46 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 	if exists {
 		p.log(msg.Type, E_NONE, "We already have object "+objIDstr+", ignoring received object.")
 	} else {
-		p.log(msg.Type, E_NONE, "Storing new object with ID "+objIDstr)
-
 		_, err := p.objectManager.Put(msg.Object)
 		if err != nil {
 			p.err(msg.Type, E_NONE, "Error storing object: "+err.Error())
 			return
 		}
-		p.log(msg.Type, E_NONE, "Object stored successfully with ID "+objIDstr)
+		p.log(msg.Type, E_NONE, "Object "+objIDstr+" stored successfully")
 
 		// Notify pending blocks that this object is now available
 		pendingBlocks := p.objectManager.PendingBlocks[objID]
 		for _, block := range pendingBlocks {
-			o := block.Block
-			if _, code, err := p.ValidateObject(o); code == E_NONE && err == nil {
+			blk := block.Block
+			_, code, err := p.ValidateObject(blk)
+			if code == E_NONE && err == nil {
 				p.log(MSG_OBJECT, E_NONE, "Pending block "+objIDstr+" is now valid with new object "+objIDstr)
-				_, err := p.objectManager.Put(o)
+				_, err := p.objectManager.Put(blk)
 				if err != nil {
 					p.err(MSG_OBJECT, E_NONE, "Error storing pending block: "+err.Error())
+					continue
 				}
+
+				BroadcastIHaveObject(objID)
+
+				connectedPeersMutex.Lock()
+				pendingPeer, exists := connectedPeers[block.Peer]
+				connectedPeersMutex.Unlock()
+				if exists {
+					pendingPeer.log(MSG_OBJECT, E_NONE, "Successfully validated pending block "+objIDstr+" after receiving missing object "+objIDstr)
+				}
+
+			} else if code != E_UNKNOWN_OBJECT {
+
+				connectedPeersMutex.Lock()
+				pendingPeer, exists := connectedPeers[block.Peer]
+				connectedPeersMutex.Unlock()
+
+				if exists {
+					pendingPeer.err(MSG_OBJECT, E_NONE, fmt.Sprintf("Received object %s, but pending block %s is still invalid: %v", objIDstr, objIDstr, err))
+					pendingPeer.SendError(code, "Pending block turned out invalid: "+err.Error())
+				}
+
 			}
 		}
 		delete(p.objectManager.PendingBlocks, objID)

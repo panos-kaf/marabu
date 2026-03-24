@@ -146,39 +146,17 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 		return E_INVALID_BLOCK_POW, fmt.Errorf("Invalid PoW for block %s", blockid)
 	}
 
-	// missingTxs := make([]T_HashID, 0)
-	missingTxs := false
-
 	for _, txid := range blk.Txids {
 		exists, err := p.objectManager.Exists(txid)
 		if err != nil {
 			return E_INTERNAL_ERROR, fmt.Errorf("Error checking existence of transaction %s: %v", txid, err)
 		}
 		if !exists {
-			missingTxs = true
-			p.objectManager.AddPendingBlock(txid, p.addr, blk)
+			p.objectManager.AddPendingBlock(p.addr, txid, blk)
 			BroadcastGetObject(txid)
-			// return E_UNKNOWN_OBJECT, fmt.Errorf("Transaction %s not found. Asked peers for it", txid)
+			return E_UNKNOWN_OBJECT, fmt.Errorf("Block references transactions we don't have. Asked peers for them")
 		}
-	}
-
-	if missingTxs {
-		return E_UNKNOWN_OBJECT, fmt.Errorf("Block references transactions we don't have. Asked peers for them")
 	}
 
 	return E_NONE, nil
-}
-
-func (p *Peer) NotifyUnfindableObject() {
-
-	// p.log(MSG_NONE, E_NONE, "Checking for unfindable objects...")
-
-	expiredBlocks := p.objectManager.CheckPendingBlocks()
-
-	for _, expired := range expiredBlocks {
-		id := expired.Peer
-		if id == p.addr {
-			p.SendError(E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
-		}
-	}
 }
