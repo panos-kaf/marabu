@@ -3,10 +3,10 @@
 package bootstrap
 
 import (
-	"marabu/internal/object"
+	"marabu/internal/objectManager"
 	"marabu/internal/peer"
 )
 
-func StartNode(objectManager *object.ObjectManager) {
+func StartNode(objectManager *objectManager.ObjectManager) {
 	go peer.StartServer(18018, objectManager)
 }
