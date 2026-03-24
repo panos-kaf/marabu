@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"marabu/internal/bootstrap"
 	"marabu/internal/logs"
-	"marabu/internal/object"
+	"marabu/internal/objectManager"
+	"marabu/internal/peer"
 	"marabu/internal/ui"
 	"os"
 	"path/filepath"
@@ -15,13 +16,6 @@ func main() {
 	logFile := logs.InitLogs()
 	defer logFile.Close()
 
-	DB_PATH := filepath.Join(".", "db")
-	objectManager, err := object.NewObjectManager(DB_PATH)
-	if err != nil {
-		fmt.Printf("Error creating object manager: %v\n", err)
-		return
-	}
-
 	PEERS_FILE := filepath.Join(".", "db", "peers.csv")
 	peersFile, err := os.OpenFile(PEERS_FILE, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -29,6 +23,15 @@ func main() {
 		os.Exit(1)
 	}
 	defer peersFile.Close()
+
+	DB_PATH := filepath.Join(".", "db")
+	objectManager, err := objectManager.NewObjectManager(DB_PATH)
+	if err != nil {
+		fmt.Printf("Error creating object manager: %v\n", err)
+		return
+	}
+
+	go peer.CleanupPendingBlocks(objectManager)
 
 	bootstrap.StartNode(objectManager)
 	ui.Start()
