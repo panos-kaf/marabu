@@ -2,6 +2,7 @@ package peer
 
 import (
 	"marabu/internal/messages"
+	"math/big"
 )
 
 const (
@@ -39,7 +40,20 @@ var (
 
 	OBJ_BLOCK       = messages.OBJ_BLOCK
 	OBJ_TRANSACTION = messages.OBJ_TRANSACTION
+
+	PEER_INVALID = messages.PEER_INVALID
+	TARGET       = messages.TARGET
+	DUMMY_HASH   = messages.DUMMY_HASH
+	ZERO_PICABU  = messages.ZERO_PICABU
 )
+
+func BlockReward() messages.T_Picabu {
+	return messages.BlockReward()
+}
+
+func BlockRewardBigInt() *big.Int {
+	return messages.BlockRewardBigInt()
+}
 
 type (
 
@@ -57,6 +71,7 @@ type (
 	T_HashID    = messages.T_HashID
 	T_HashIDs   = messages.T_HashIDs
 	T_Signature = messages.T_Signature
+	T_Picabu    = messages.T_Picabu
 
 	T_BuInt     = messages.T_BuInt
 	T_BuString  = messages.T_BuString
