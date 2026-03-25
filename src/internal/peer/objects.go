@@ -31,8 +31,8 @@ func (p *Peer) ValidateObject(obj Object) (T_HashID, T_Picabu, ErrorCode, error)
 		if err != nil {
 			return objID, ZERO_PICABU, errorCode, fmt.Errorf("Validation failed for coinbase transaction %s: %v", objID, err)
 		}
-		feestr := (*big.Int)(&fee).String()
-		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("Coinbase transaction %s is valid with fee %s", objID, feestr))
+		// feestr := (*big.Int)(&fee).String()
+		p.log(MSG_OBJECT, E_NONE, fmt.Sprintf("Coinbase transaction %s is valid", objID))
 		return objID, fee, E_NONE, nil
 
 	case *T_Block:
@@ -154,6 +154,13 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 		return E_INVALID_BLOCK_POW, fmt.Errorf("Invalid PoW for block %s", blockid)
 	}
 
+	UTXO, err := p.objectManager.GetUTXO(*blk.Previd)
+	if err != nil {
+		return E_UNKNOWN_OBJECT, fmt.Errorf("Could not find UTXO for block %s: %v", *blk.Previd, err)
+	}
+
+	utxos := UTXO.UTXOs
+
 	hasCoinbase := false
 	var cbTx *T_CoinbaseTransaction
 	var cbID T_HashID
@@ -201,7 +208,23 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 						return E_INVALID_TX_OUTPOINT, fmt.Errorf("Cannot spend coinbase transaction in the same block")
 					}
 
+					inputIndex := int(*outpoint.Index)
+					inputTx := outpoint.Txid
+					_, exists := utxos[UTXOKey{Txid: inputTx, Index: inputIndex}]
+					if !exists {
+						return E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid input: %s (not found in UTXO set)", txid)
+					}
+					// apply the transaction by removing the spent outputs from UTXO set
+					delete(utxos, UTXOKey{Txid: inputTx, Index: inputIndex})
 				}
+
+				for idx, output := range tx.Outputs {
+					// add new outputs to UTXO set
+					// appendToUTXO(txid)
+					utxos[UTXOKey{Txid: txid, Index: idx}] = output
+
+				}
+
 			case *T_CoinbaseTransaction:
 				hasCoinbase = true
 				cbTx = tx
@@ -214,6 +237,8 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 				if index != 0 {
 					return E_INVALID_BLOCK_COINBASE, fmt.Errorf("Only the first transaction in the block can be a coinbase, found one at index %d", index)
 				}
+				utxos[UTXOKey{Txid: cbID, Index: 0}] = cbTx.Outputs[0]
+
 			default:
 				return E_INTERNAL_ERROR, fmt.Errorf("Referenced object is of unknown type")
 			}
@@ -232,6 +257,15 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 
 	if coinbaseVal.Cmp(totalOutput) == 1 {
 		return E_INVALID_BLOCK_COINBASE, fmt.Errorf("Coinbase transaction value %d exceeds allowed reward+fees of %d", coinbaseVal, totalOutput)
+	}
+
+	newUTXO := UTXOSet{
+		UTXOs:   utxos,
+		BlockID: T_HashID(blockid),
+	}
+	err = p.objectManager.PutUTXO(T_HashID(blockid), newUTXO)
+	if err != nil {
+		return E_INTERNAL_ERROR, fmt.Errorf("Failed to update UTXO set for block %s: %v", blockid, err)
 	}
 
 	return E_NONE, nil
