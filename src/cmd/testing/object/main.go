@@ -168,13 +168,14 @@ func expectError(p *Peer, expected string) {
 func testUnknownObject(p *Peer) {
 	fmt.Println("\n[Test 2a(i)] UNKNOWN_OBJECT")
 
+	idx := messages.T_BuInt(0)
 	tx := messages.T_Transaction{
 		Type: messages.OBJ_TRANSACTION,
 		Inputs: []messages.T_TxInput{
 			{
-				T_Outpoint: messages.T_Outpoint{
+				Outpoint: messages.T_Outpoint{
 					Txid:  messages.T_HashID("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
-					Index: 0,
+					Index: &idx,
 				},
 			},
 		},
@@ -198,14 +199,15 @@ func testUnknownObject(p *Peer) {
 func testInvalidSignature(p *Peer, coinbaseID messages.T_HashID) {
 	fmt.Println("\n[Test 2a(ii)] INVALID_TX_SIGNATURE")
 
-	v := messages.T_BuInt(10)
+	v := messages.NewPicabu(10)
+	idx := messages.T_BuInt(0)
 
 	tx := messages.T_Transaction{
 		Type: messages.OBJ_TRANSACTION,
 		Inputs: []messages.T_TxInput{
 			{
-				T_Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: 0},
-				Sig:        nil,
+				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
+				Sig:      nil,
 			},
 		},
 		Outputs: []messages.T_TxOutput{
@@ -221,13 +223,14 @@ func testInvalidSignature(p *Peer, coinbaseID messages.T_HashID) {
 func testInvalidOutpoint(p *Peer, coinbaseID messages.T_HashID) {
 	fmt.Println("\n[Test 2a(iii)] INVALID_TX_OUTPOINT")
 
-	v := messages.T_BuInt(10)
+	v := messages.NewPicabu(10)
+	idx := messages.T_BuInt(999)
 
 	tx := messages.T_Transaction{
 		Type: messages.OBJ_TRANSACTION,
 		Inputs: []messages.T_TxInput{
 			{
-				T_Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: 999},
+				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
 			},
 		},
 		Outputs: []messages.T_TxOutput{
@@ -243,14 +246,15 @@ func testInvalidOutpoint(p *Peer, coinbaseID messages.T_HashID) {
 func testConservation(p *Peer, coinbaseID messages.T_HashID, sig messages.T_Signature) {
 	fmt.Println("\n[Test 2a(iv)] INVALID_TX_CONSERVATION")
 
-	v := messages.T_BuInt(50000000001)
+	v := messages.NewPicabu(50000000001)
+	idx := messages.T_BuInt(0)
 
 	tx := messages.T_Transaction{
 		Type: messages.OBJ_TRANSACTION,
 		Inputs: []messages.T_TxInput{
 			{
-				T_Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: 0},
-				Sig:        &sig,
+				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
+				Sig:      &sig,
 			},
 		},
 		Outputs: []messages.T_TxOutput{
@@ -295,7 +299,7 @@ func main() {
 	   Coinbase
 	--------------------------*/
 	h := messages.T_BuInt(0)
-	v := messages.T_BuInt(50000000000)
+	v := messages.NewPicabu(50000000000)
 
 	coinbase := messages.T_CoinbaseTransaction{
 		Type:   messages.OBJ_TRANSACTION,

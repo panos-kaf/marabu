@@ -72,7 +72,7 @@ func main() {
 	// Parse and check for getpeers response
 
 	height := messages.T_BuInt(0)
-	val := messages.T_BuInt(50000000000)
+	val := messages.NewPicabu(50000000000)
 
 	// 1. Coinbase transaction
 	coinbaseTx := messages.T_CoinbaseTransaction{
@@ -94,13 +94,15 @@ func main() {
 
 	// 2. Regular transaction
 	sig := messages.T_Signature("060bf7cbe141fecfebf6dafbd6ebbcff25f82e729a7770f4f3b1f81a7ec8a0ce4b287597e609b822111bbe1a83d682ef14f018f8a9143cef25ecc9a8b0c1c405")
+	idx := messages.T_BuInt(0)
+	val2 := messages.NewPicabu(10)
 
 	input := messages.T_TxInput{
-		T_Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: 0},
+		Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
 		Sig:        &sig,
 	}
 
-	val2 := messages.T_BuInt(10)
+	val2 = messages.NewPicabu(10)
 
 	output := messages.T_TxOutput{
 		Pubkey: "958f8add086cc348e229a3b6590c71b7d7754e42134a127a50648bf07969d9a0",
