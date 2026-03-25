@@ -87,7 +87,7 @@ func (p *Peer) handleIHaveObject(msg *IHaveObjectMessage) {
 
 func (p *Peer) handleObject(msg *ObjectMessage) {
 
-	objID, errorCode, err := p.ValidateObject(msg.Object)
+	objID, fee, errorCode, err := p.ValidateObject(msg.Object)
 	if err != nil {
 		p.err(msg.Type, E_NONE, "Received invalid object from peer "+p.addr+": "+err.Error())
 		p.SendError(errorCode, "Invalid object: "+err.Error())
@@ -113,11 +113,18 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 		}
 		p.log(msg.Type, E_NONE, "Object "+objIDstr+" stored successfully")
 
+		if msg.Object.ObjectType() == OBJ_TRANSACTION {
+			err = p.objectManager.PutFee(objID, fee)
+			if err != nil {
+				p.err(msg.Type, E_NONE, "Error storing fee for object: "+err.Error())
+			}
+		}
+
 		// Notify pending blocks that this object is now available
 		pendingBlocks := p.objectManager.PendingBlocks[objID]
-		for _, block := range pendingBlocks {
-			blk := block.Block
-			_, code, err := p.ValidateObject(blk)
+		for _, pending := range pendingBlocks {
+			blk := pending.Block
+			_, _, code, err := p.ValidateObject(blk)
 			if code == E_NONE && err == nil {
 				p.log(MSG_OBJECT, E_NONE, "Pending block "+objIDstr+" is now valid with new object "+objIDstr)
 				_, err := p.objectManager.Put(blk)
@@ -129,7 +136,7 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 				BroadcastIHaveObject(objID)
 
 				connectedPeersMutex.Lock()
-				pendingPeer, exists := connectedPeers[block.Peer]
+				pendingPeer, exists := connectedPeers[pending.Peer]
 				connectedPeersMutex.Unlock()
 				if exists {
 					pendingPeer.log(MSG_OBJECT, E_NONE, "Successfully validated pending block "+objIDstr+" after receiving missing object "+objIDstr)
@@ -138,7 +145,7 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 			} else if code != E_UNKNOWN_OBJECT {
 
 				connectedPeersMutex.Lock()
-				pendingPeer, exists := connectedPeers[block.Peer]
+				pendingPeer, exists := connectedPeers[pending.Peer]
 				connectedPeersMutex.Unlock()
 
 				if exists {
