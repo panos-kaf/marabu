@@ -85,6 +85,18 @@ func BlockRewardBigInt() *big.Int {
 	return new(big.Int).SetUint64(BLOCK_REWARD_UINT64)
 }
 
+type UTXOKey struct {
+	Txid  T_HashID
+	Index int
+}
+
+type UTXOSet struct {
+	BlockID T_HashID
+	// Block   *T_Block
+	// only store unspent outputs from txs
+	UTXOs map[UTXOKey]T_TxOutput
+}
+
 type (
 	HelloMessage struct {
 		Type      MessageType `json:"type"`

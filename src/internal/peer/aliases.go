@@ -88,6 +88,10 @@ type (
 	T_TxInput  = messages.T_TxInput
 	T_Outpoint = messages.T_Outpoint
 
+	// UTXO types
+	UTXOKey = messages.UTXOKey
+	UTXOSet = messages.UTXOSet
+
 	// Message Schemas
 	HelloMessage       = messages.HelloMessage
 	ErrorMessage       = messages.ErrorMessage
