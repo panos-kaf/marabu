@@ -12,23 +12,12 @@ import (
 	"strings"
 )
 
-// Reusable compiled regexes for performance
-var (
-	versionRegex = regexp.MustCompile(`^0\.10\.[0-9]+$`)
-
-	// very loose peer regex
-	// peerRegex = regexp.MustCompile(`^(\[[a-fA-F0-9:]+\]|[a-fA-F0-9:]+|[a-zA-Z0-9.-]+):[0-9]{1,5}$`)
-)
+var versionRegex = regexp.MustCompile(`^0\.10\.[0-9]+$`)
 
 const (
 	maxArrLen = 1000
 	maxStrLen = 1000
 )
-
-func ValidateVersionString(val string) (error, ErrorCode) {
-
-	return nil, E_NONE
-}
 
 var messageTypeRegistry = map[string]reflect.Type{
 	string(MSG_HELLO):       reflect.TypeOf(HelloMessage{}),
@@ -89,6 +78,7 @@ func (mt *MessageType) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid message type: '%s'", s)
 	}
 }
+
 func (v *T_Version) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -311,10 +301,7 @@ func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 
 // Custom MarshalJSON for Picabu to properly output the number
 func (b *T_Picabu) MarshalJSON() ([]byte, error) {
-	// 1. Cast the pointer to *big.Int so we can use its String() method
 	numStr := (*big.Int)(b).String()
-
-	// 2. Return the string as a raw byte array (which JSON interprets as a raw number)
 	return []byte(numStr), nil
 }
 

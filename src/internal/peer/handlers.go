@@ -67,7 +67,7 @@ func (p *Peer) handleGetObject(msg *GetObjectMessage) {
 func (p *Peer) handleIHaveObject(msg *IHaveObjectMessage) {
 
 	ID := msg.ObjectID
-	p.log(msg.Type, E_NONE, "Peer: "+p.addr+"  has object with ID: "+string(ID))
+	p.log(msg.Type, E_NONE, "Peer: "+p.addr+" has object with ID: "+string(ID))
 
 	exists, e := p.objectManager.Exists(ID)
 	if e != nil {
@@ -106,6 +106,7 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 	if exists {
 		p.log(msg.Type, E_NONE, "We already have object "+objIDstr+", ignoring received object.")
 	} else {
+		
 		_, err := p.objectManager.Put(msg.Object)
 		if err != nil {
 			p.err(msg.Type, E_NONE, "Error storing object: "+err.Error())
