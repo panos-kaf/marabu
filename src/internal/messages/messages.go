@@ -2,6 +2,7 @@ package messages
 
 import (
 	"encoding/json"
+	"math/big"
 )
 
 type (
@@ -20,6 +21,8 @@ type (
 	T_HashID    string // 32byte (64-character) hex string
 	T_HashIDs   []T_HashID
 	T_Signature string // 64byte (128-character) hex string
+
+	T_Picabu big.Int
 
 	T_BuInt     int
 	T_BuString  string
@@ -59,7 +62,28 @@ const (
 	PEER_INVALID = ""
 
 	TARGET = T_HashID("00000000abc00000000000000000000000000000000000000000000000000000")
+
+	DUMMY_HASH = T_HashID("CAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABECAFEBABE")
 )
+
+// Empty struct evaluates to zero value
+var ZERO_PICABU = T_Picabu{}
+
+// 50 x 10^12 picabu, must cast it to picabu
+const BLOCK_REWARD_UINT64 uint64 = 50000000000000
+
+func NewPicabu(val uint64) T_Picabu {
+	// create a new bigint, set it to the uint64, dereference it, and cast it!
+	return T_Picabu(*new(big.Int).SetUint64(val))
+}
+
+func BlockReward() T_Picabu {
+	return NewPicabu(BLOCK_REWARD_UINT64)
+}
+
+func BlockRewardBigInt() *big.Int {
+	return new(big.Int).SetUint64(BLOCK_REWARD_UINT64)
+}
 
 type (
 	HelloMessage struct {

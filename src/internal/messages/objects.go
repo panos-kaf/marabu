@@ -18,7 +18,7 @@ type (
 
 	T_TxInputs []T_TxInput
 	T_TxInput  struct {
-		T_Outpoint T_Outpoint `json:"outpoint"`
+		Outpoint T_Outpoint `json:"outpoint"`
 
 		// 64byte (128-character) hexadecimal string, handle as simple string for now...
 		Sig *T_Signature `json:"sig"`
@@ -26,8 +26,8 @@ type (
 
 	T_TxOutputs []T_TxOutput
 	T_TxOutput  struct {
-		Pubkey T_HashID `json:"pubkey"`
-		Value  *T_BuInt `json:"value"`
+		Pubkey T_HashID  `json:"pubkey"`
+		Value  *T_Picabu `json:"value"`
 	}
 )
 
@@ -90,7 +90,7 @@ func (b T_Block) ObjectType() ObjectType {
 
 func makeTxInput(txid T_HashID, index T_BuInt, sig T_Signature) T_TxInput {
 	return T_TxInput{
-		T_Outpoint: T_Outpoint{
+		Outpoint: T_Outpoint{
 			Txid:  txid,
 			Index: &index,
 		},
@@ -98,7 +98,7 @@ func makeTxInput(txid T_HashID, index T_BuInt, sig T_Signature) T_TxInput {
 	}
 }
 
-func makeTxOutput(pubkey T_HashID, value T_BuInt) T_TxOutput {
+func makeTxOutput(pubkey T_HashID, value T_Picabu) T_TxOutput {
 	return T_TxOutput{
 		Pubkey: pubkey,
 		Value:  &value,

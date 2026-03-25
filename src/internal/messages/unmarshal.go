@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"reflect"
 	"regexp"
@@ -214,6 +215,11 @@ func (c *T_CoinbaseTransaction) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("invalid CoinbaseTransaction format: %w", err)
 	}
+
+	if len(c.Outputs) != 1 {
+		return fmt.Errorf("coinbase transaction must have exactly one output, got %d", len(c.Outputs))
+	}
+
 	if c.Height == nil {
 		return fmt.Errorf("missing height field in CoinbaseTransaction")
 	}
@@ -269,6 +275,11 @@ func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 		if b.T != TARGET {
 			return fmt.Errorf("invalid block object: T field does not match marabu target")
 		}
+
+		if len(b.Txids) == 0 {
+			return fmt.Errorf("invalid block object: must contain at least one transaction")
+		}
+
 		o.Object = &b
 
 	case OBJ_TRANSACTION:
@@ -295,6 +306,29 @@ func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 	default:
 		return fmt.Errorf("unknown object type: %s", typeProbe.Type)
 	}
+	return nil
+}
+
+// Custom MarshalJSON for Picabu to properly output the number
+func (b *T_Picabu) MarshalJSON() ([]byte, error) {
+	// 1. Cast the pointer to *big.Int so we can use its String() method
+	numStr := (*big.Int)(b).String()
+
+	// 2. Return the string as a raw byte array (which JSON interprets as a raw number)
+	return []byte(numStr), nil
+}
+
+func (b *T_Picabu) UnmarshalJSON(data []byte) error {
+	var i big.Int
+	if err := json.Unmarshal(data, &i); err != nil {
+		return fmt.Errorf("invalid Picabu format: %w", err)
+	}
+
+	if i.Sign() < 0 {
+		return fmt.Errorf("Picabu value must be non-negative, got %s", i.String())
+	}
+
+	*b = T_Picabu(i)
 	return nil
 }
 
