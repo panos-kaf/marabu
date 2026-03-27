@@ -51,15 +51,13 @@ func HashObject(o messages.Object) (string, error) {
 	return hash, nil
 }
 
-func VerifyPoW(data string) (bool, error) {
-
-	hash, err := HashString(data)
-	if err != nil {
-		return false, err
-	}
+func VerifyPoW(blockid string) (bool, error) {
 
 	hashInt := new(big.Int)
-	hashInt.SetString(hash, 16)
+	_, ok := hashInt.SetString(blockid, 16)
+	if !ok {
+		return false, fmt.Errorf("Error parsing block ID as hex: %s", blockid)
+	}
 
-	return hashInt.Cmp(TARGET()) == -1, nil
+	return hashInt.Cmp(TARGET()) < 1, nil
 }
