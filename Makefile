@@ -1,5 +1,8 @@
 SRC=./src
 
+all:
+	make -C $(SRC) all
+
 build:
 	make -C $(SRC) build
 
@@ -26,6 +29,9 @@ test-obj-simple:
 
 test-pset2:
 	make -C $(SRC) test-pset2
+
+test-utxo:
+	mace -C $(SRC) test-utxo
 
 run:
 	make -C $(SRC) run
