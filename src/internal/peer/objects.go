@@ -147,6 +147,10 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 	}
 
 	isValid, err := crypto.VerifyPoW(blockid)
+
+	// DUMMY VALIDATION - REMOVE THIS
+	// isValid = true
+
 	if err != nil {
 		return E_INTERNAL_ERROR, fmt.Errorf("Failed to verify PoW for block %s: %v", blockid, err)
 	}
@@ -154,12 +158,19 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 		return E_INVALID_BLOCK_POW, fmt.Errorf("Invalid PoW for block %s", blockid)
 	}
 
-	UTXO, err := p.objectManager.GetUTXO(*blk.Previd)
-	if err != nil {
-		return E_UNKNOWN_OBJECT, fmt.Errorf("Could not find UTXO for block %s: %v", *blk.Previd, err)
-	}
+	utxos := make(map[UTXOKey]messages.T_TxOutput)
 
-	utxos := UTXO.UTXOs
+	isGenesis := blk.Previd == nil
+
+	if isGenesis {
+		p.logInfo(fmt.Sprintf("Block %s is the genesis block, so UTXO is empty", blockid))
+	} else {
+		UTXO, err := p.objectManager.GetUTXO(*blk.Previd)
+		utxos = UTXO.UTXOs
+		if err != nil {
+			return E_UNKNOWN_OBJECT, fmt.Errorf("Could not find UTXO for block %s: %v", *blk.Previd, err)
+		}
+	}
 
 	hasCoinbase := false
 	var cbTx *T_CoinbaseTransaction
@@ -184,22 +195,9 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 			}
 			switch tx := tx.(type) {
 			case *T_Transaction:
-				fee, err := p.objectManager.GetFee(txid)
-				if err != nil {
-					p.logInfo(fmt.Sprintf("Fee cache miss for transaction %s: %v", txid, err))
 
-					recalculatedFee, errorCode, err := p.ValidateTransaction(tx)
-					if err != nil {
-						return errorCode, fmt.Errorf("Failed to validate transaction %s while processing block: %v", txid, err)
-					}
-					fee = recalculatedFee
-
-					err = p.objectManager.PutFee(txid, fee)
-					if err != nil {
-						p.err(MSG_OBJECT, E_NONE, fmt.Sprintf("Failed to cache fee for transaction %s: %v", txid, err))
-					}
-				}
-				fees.Add(fees, (*big.Int)(&fee))
+				sumInputs := new(big.Int)
+				sumOutputs := new(big.Int)
 
 				for _, input := range tx.Inputs {
 					outpoint := input.Outpoint
@@ -210,20 +208,29 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 
 					inputIndex := int(*outpoint.Index)
 					inputTx := outpoint.Txid
-					_, exists := utxos[UTXOKey{Txid: inputTx, Index: inputIndex}]
+					spentOutput, exists := utxos[UTXOKey{Txid: inputTx, Index: inputIndex}]
 					if !exists {
 						return E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid input: %s (not found in UTXO set)", txid)
 					}
+
+					sumInputs.Add(sumInputs, (*big.Int)(spentOutput.Value))
+
 					// apply the transaction by removing the spent outputs from UTXO set
 					delete(utxos, UTXOKey{Txid: inputTx, Index: inputIndex})
 				}
 
 				for idx, output := range tx.Outputs {
 					// add new outputs to UTXO set
-					// appendToUTXO(txid)
+
+					sumOutputs.Add(sumOutputs, (*big.Int)(output.Value))
+
 					utxos[UTXOKey{Txid: txid, Index: idx}] = output
 
 				}
+
+				fee := new(big.Int)
+				fee.Sub(sumInputs, sumOutputs)
+				fees.Add(fees, fee)
 
 			case *T_CoinbaseTransaction:
 				hasCoinbase = true
@@ -250,7 +257,13 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 		}
 	}
 
-	coinbaseVal := (*big.Int)(cbTx.Outputs[0].Value)
+	var coinbaseVal *big.Int
+
+	if hasCoinbase {
+		coinbaseVal = (*big.Int)(cbTx.Outputs[0].Value)
+	} else {
+		coinbaseVal = new(big.Int) // zero value
+	}
 
 	totalOutput := BlockRewardBigInt()
 	totalOutput.Add(totalOutput, fees)
