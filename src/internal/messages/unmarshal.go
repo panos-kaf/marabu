@@ -266,10 +266,6 @@ func (o *ObjectMessage) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("invalid block object: T field does not match marabu target")
 		}
 
-		if len(b.Txids) == 0 {
-			return fmt.Errorf("invalid block object: must contain at least one transaction")
-		}
-
 		o.Object = &b
 
 	case OBJ_TRANSACTION:
