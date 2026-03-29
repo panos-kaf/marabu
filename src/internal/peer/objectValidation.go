@@ -57,7 +57,6 @@ func (p *Peer) ValidateTransaction(tx *T_Transaction) (T_Picabu, ErrorCode, erro
 	sumInputs := new(big.Int)
 	sumOutputs := new(big.Int)
 
-	// 1. Create a quick struct to hold the data we need for crypto later
 	type sigData struct {
 		pubkey string
 		sig    string
