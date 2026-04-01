@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"marabu/internal/messages"
-	"marabu/internal/objectManager"
+	"marabu/internal/storage"
 	"net"
 	"strconv"
 	"strings"
@@ -26,7 +26,7 @@ type Peer struct {
 	handshakeComplete bool
 	done              chan struct{}
 	role              string
-	objectManager     *objectManager.ObjectManager
+	objectManager     *storage.ObjectManager
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -34,7 +34,7 @@ type Peer struct {
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
 	role string,
-	objectManager *objectManager.ObjectManager) *Peer {
+	objectManager *storage.ObjectManager) *Peer {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
@@ -73,7 +73,7 @@ func (p *Peer) Routine(interval time.Duration, fn func()) {
 	}
 }
 
-func CleanupPendingBlocks(om *objectManager.ObjectManager) {
+func CleanupPendingBlocks(om *storage.ObjectManager) {
 	ticker := time.NewTicker(2 * time.Second)
 
 	for range ticker.C {
@@ -200,7 +200,7 @@ func (p *Peer) handleMessage(raw string) {
 	}
 }
 
-func StartServer(port int, objectManager *objectManager.ObjectManager) error {
+func StartServer(port int, objectManager *storage.ObjectManager) error {
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
@@ -225,7 +225,7 @@ func StartServer(port int, objectManager *objectManager.ObjectManager) error {
 	}
 }
 
-func StartClient(host string, port int, objectManager *objectManager.ObjectManager) error {
+func StartClient(host string, port int, objectManager *storage.ObjectManager) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.Dial("tcp", addr)

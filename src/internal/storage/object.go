@@ -1,4 +1,4 @@
-package objectManager
+package storage
 
 import (
 	"marabu/internal/crypto"

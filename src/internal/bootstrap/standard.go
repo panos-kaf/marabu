@@ -5,14 +5,14 @@ package bootstrap
 import (
 	"fmt"
 	"marabu/internal/messages"
-	"marabu/internal/objectManager"
+	"marabu/internal/storage"
 	"marabu/internal/peer"
 	"net"
 	"strconv"
 )
 
 // start server and initiate client connections to bootstrap peers
-func StartNode(objectManager *objectManager.ObjectManager) {
+func StartNode(objectManager *storage.ObjectManager) {
 	go peer.StartServer(18018, objectManager)
 
 	for _, p := range peer.BOOTSTRAP_PEERS {
