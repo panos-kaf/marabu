@@ -26,7 +26,7 @@ type Peer struct {
 	handshakeComplete bool
 	done              chan struct{}
 	role              string
-	objectManager     *storage.ObjectManager
+	Store             *storage.Store
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -34,16 +34,16 @@ type Peer struct {
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
 	role string,
-	objectManager *storage.ObjectManager) *Peer {
+	Store *storage.Store) *Peer {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
-		conn:          conn,
-		addr:          addr,
-		buffer:        make([]byte, 0),
-		role:          role,
-		objectManager: objectManager,
-		done:          make(chan struct{}),
+		conn:   conn,
+		addr:   addr,
+		buffer: make([]byte, 0),
+		role:   role,
+		Store:  Store,
+		done:   make(chan struct{}),
 	}
 
 	connectedPeersMutex.Lock()
@@ -73,7 +73,7 @@ func (p *Peer) Routine(interval time.Duration, fn func()) {
 	}
 }
 
-func CleanupPendingBlocks(om *storage.ObjectManager) {
+func CleanupPendingBlocks(om *storage.Store) {
 	ticker := time.NewTicker(2 * time.Second)
 
 	for range ticker.C {
@@ -200,7 +200,7 @@ func (p *Peer) handleMessage(raw string) {
 	}
 }
 
-func StartServer(port int, objectManager *storage.ObjectManager) error {
+func StartServer(port int, Store *storage.Store) error {
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
@@ -217,7 +217,7 @@ func StartServer(port int, objectManager *storage.ObjectManager) error {
 
 		addr := conn.RemoteAddr().String()
 
-		p := NewPeer(conn, "server", objectManager)
+		p := NewPeer(conn, "server", Store)
 
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
@@ -225,7 +225,7 @@ func StartServer(port int, objectManager *storage.ObjectManager) error {
 	}
 }
 
-func StartClient(host string, port int, objectManager *storage.ObjectManager) error {
+func StartClient(host string, port int, Store *storage.Store) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.Dial("tcp", addr)
@@ -233,7 +233,7 @@ func StartClient(host string, port int, objectManager *storage.ObjectManager) er
 		return err
 	}
 
-	p := NewPeer(conn, "client", objectManager)
+	p := NewPeer(conn, "client", Store)
 
 	p.logInfo(fmt.Sprintf("Connected to server at %s:%d", host, port))
 

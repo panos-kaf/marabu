@@ -20,7 +20,7 @@ type PendingBlock struct {
 	Peer      string
 }
 
-type ObjectManager struct {
+type Store struct {
 	db           *leveldb.DB
 	pendingFinds map[T_HashID][]chan messages.Object
 	mutex        sync.Mutex
@@ -28,29 +28,28 @@ type ObjectManager struct {
 	PendingBlocks map[T_HashID][]PendingBlock
 }
 
-func NewObjectManager(path string) (*ObjectManager, error) {
+func NewStore(path string) (*Store, error) {
 	db, err := leveldb.OpenFile(path, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &ObjectManager{
+	return &Store{
 		db:            db,
 		pendingFinds:  make(map[T_HashID][]chan messages.Object),
 		PendingBlocks: make(map[T_HashID][]PendingBlock),
 	}, nil
 }
 
-func (om *ObjectManager) Exists(id T_HashID) (bool, error) {
-	return om.db.Has([]byte(id), nil)
+func (s *Store) ExistsObject(id T_HashID) (bool, error) {
+	return s.db.Has([]byte(id), nil)
 }
 
-func (om *ObjectManager) Get(id T_HashID) (messages.Object, error) {
-	data, err := om.db.Get([]byte(id), nil)
+func (s *Store) GetObject(id T_HashID) (messages.Object, error) {
+	data, err := s.db.Get([]byte(id), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Probe the type field
 	var probe struct {
 		Type string `json:"type"`
 	}
@@ -60,14 +59,14 @@ func (om *ObjectManager) Get(id T_HashID) (messages.Object, error) {
 
 	switch probe.Type {
 	case "transaction":
-		var probe struct {
+		var heightProbe struct {
 			Height *int `json:"height"`
 		}
-		if err := json.Unmarshal(data, &probe); err != nil {
+		if err := json.Unmarshal(data, &heightProbe); err != nil {
 			return nil, err
 		}
 
-		if probe.Height != nil {
+		if heightProbe.Height != nil {
 			var cb messages.T_CoinbaseTransaction
 			if err := json.Unmarshal(data, &cb); err != nil {
 				return nil, err
@@ -92,7 +91,7 @@ func (om *ObjectManager) Get(id T_HashID) (messages.Object, error) {
 	}
 }
 
-func (om *ObjectManager) Put(object messages.Object) (T_HashID, error) {
+func (s *Store) PutObject(object messages.Object) (T_HashID, error) {
 	canon, err := messages.Canonicalize(object)
 	if err != nil {
 		return "", err
@@ -102,35 +101,29 @@ func (om *ObjectManager) Put(object messages.Object) (T_HashID, error) {
 		return "", err
 	}
 
-	// Marshal and store
 	data, err := json.Marshal(object)
 	if err != nil {
 		return "", err
 	}
 
-	if err := om.db.Put([]byte(id), data, nil); err != nil {
+	if err := s.db.Put([]byte(id), data, nil); err != nil {
 		return "", err
 	}
 
-	hashID := T_HashID(id)
-	return hashID, nil
+	return T_HashID(id), nil
 }
 
-// Implement FindObject with channels for pending requests
-func (om *ObjectManager) FindObject(id T_HashID) (messages.Object, error) {
-	// First, try to get the object immediately
-	obj, err := om.Get(id)
+func (s *Store) FindObject(id T_HashID) (messages.Object, error) {
+	obj, err := s.GetObject(id)
 	if err == nil {
 		return obj, nil
 	}
 
-	// If not found, set up a pending channel
-	om.mutex.Lock()
+	s.mutex.Lock()
 	ch := make(chan messages.Object, 1)
-	om.pendingFinds[id] = append(om.pendingFinds[id], ch)
-	om.mutex.Unlock()
+	s.pendingFinds[id] = append(s.pendingFinds[id], ch)
+	s.mutex.Unlock()
 
-	// Wait for the object to be provided by someone else (e.g., after a network fetch)
 	result, ok := <-ch
 	if !ok {
 		return nil, fmt.Errorf("find for object %s was cancelled", id)
@@ -138,35 +131,33 @@ func (om *ObjectManager) FindObject(id T_HashID) (messages.Object, error) {
 	return result, nil
 }
 
-// When you later receive the object (e.g., after a network fetch and Put):
-func (om *ObjectManager) notifyWaiters(id T_HashID, obj messages.Object) {
-	om.mutex.Lock()
-	defer om.mutex.Unlock()
-	for _, ch := range om.pendingFinds[id] {
+func (s *Store) notifyWaiters(id T_HashID, obj messages.Object) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, ch := range s.pendingFinds[id] {
 		ch <- obj
 		close(ch)
 	}
-	delete(om.pendingFinds, id)
+	delete(s.pendingFinds, id)
 }
 
-// peer received a block that waits for object with id missingID.
-func (om *ObjectManager) AddPendingBlock(peer string, missingID T_HashID, block *messages.T_Block) {
-	om.mutex.Lock()
-	defer om.mutex.Unlock()
-	om.PendingBlocks[missingID] = append(om.PendingBlocks[missingID], PendingBlock{
+func (s *Store) AddPendingBlock(peer string, missingID T_HashID, block *messages.T_Block) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.PendingBlocks[missingID] = append(s.PendingBlocks[missingID], PendingBlock{
 		Block:     block,
 		Timestamp: time.Now(),
 		Peer:      peer,
 	})
 }
 
-func (om *ObjectManager) CheckPendingBlocks() []struct {
+func (s *Store) CheckPendingBlocks() []struct {
 	Peer  string
 	Block *messages.T_Block
 	Txid  T_HashID
 } {
-	om.mutex.Lock()
-	defer om.mutex.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	now := time.Now()
 	var expired []struct {
 		Peer  string
@@ -176,7 +167,7 @@ func (om *ObjectManager) CheckPendingBlocks() []struct {
 
 	timeout := 5 * time.Second
 
-	for txid, blocks := range om.PendingBlocks {
+	for txid, blocks := range s.PendingBlocks {
 		var stillPending []PendingBlock
 		for _, blk := range blocks {
 			if now.Sub(blk.Timestamp) > timeout {
@@ -190,9 +181,9 @@ func (om *ObjectManager) CheckPendingBlocks() []struct {
 			}
 		}
 		if len(stillPending) == 0 {
-			delete(om.PendingBlocks, txid)
+			delete(s.PendingBlocks, txid)
 		} else {
-			om.PendingBlocks[txid] = stillPending
+			s.PendingBlocks[txid] = stillPending
 		}
 	}
 	return expired

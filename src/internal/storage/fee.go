@@ -7,16 +7,16 @@ import (
 )
 
 // PutFee caches the calculated fee for a transaction
-func (om *ObjectManager) PutFee(id T_HashID, fee messages.T_Picabu) error {
+func (s *Store) PutFee(id T_HashID, fee messages.T_Picabu) error {
 	feeStr := (*big.Int)(&fee).String()
 	key := []byte("fee-" + string(id))
-	return om.db.Put(key, []byte(feeStr), nil)
+	return s.db.Put(key, []byte(feeStr), nil)
 }
 
 // GetFee retrieves the cached fee
-func (om *ObjectManager) GetFee(id T_HashID) (messages.T_Picabu, error) {
+func (s *Store) GetFee(id T_HashID) (messages.T_Picabu, error) {
 	key := []byte("fee-" + string(id))
-	data, err := om.db.Get(key, nil)
+	data, err := s.db.Get(key, nil)
 	if err != nil {
 		return messages.ZERO_PICABU, fmt.Errorf("fee not found for tx %s", id)
 	}

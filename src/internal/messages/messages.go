@@ -94,7 +94,8 @@ type UTXOSet struct {
 	BlockID T_HashID
 	// Block   *T_Block
 	// only store unspent outputs from txs
-	UTXOs map[UTXOKey]T_TxOutput
+	UTXOs  map[UTXOKey]T_TxOutput
+	Height uint64
 }
 
 type (

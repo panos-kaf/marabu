@@ -42,14 +42,14 @@ func (p *Peer) handleGetObject(msg *GetObjectMessage) {
 
 	p.log(mtype, E_NONE, "Peer: "+p.addr+" requested object: "+string(ID))
 
-	exists, err := p.objectManager.Exists(ID)
+	exists, err := p.Store.ExistsObject(ID)
 	if err != nil {
 		p.err(mtype, E_NONE, "Error checking if object exists: "+err.Error())
 		return
 	}
 	if exists {
 		p.log(mtype, E_NONE, "We have object "+string(ID)+", sending it to peer "+p.addr)
-		obj, err := p.objectManager.Get(ID)
+		obj, err := p.Store.GetObject(ID)
 		if err != nil {
 			p.err(mtype, E_NONE, "Error retrieving object: "+err.Error())
 			return
@@ -69,7 +69,7 @@ func (p *Peer) handleIHaveObject(msg *IHaveObjectMessage) {
 	ID := msg.ObjectID
 	p.log(msg.Type, E_NONE, "Peer: "+p.addr+" has object with ID: "+string(ID))
 
-	exists, e := p.objectManager.Exists(ID)
+	exists, e := p.Store.ExistsObject(ID)
 	if e != nil {
 		p.err(msg.Type, E_NONE, "Error checking if object exists: "+e.Error())
 		return
@@ -97,7 +97,7 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 	objIDstr := string(objID)
 	p.log(msg.Type, E_NONE, "Received Object with ID "+objIDstr+" from peer: "+p.addr)
 
-	exists, err := p.objectManager.Exists(objID)
+	exists, err := p.Store.ExistsObject(objID)
 	if err != nil {
 		p.err(msg.Type, E_NONE, "Error checking if object exists: "+err.Error())
 		return
@@ -106,8 +106,8 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 	if exists {
 		p.log(msg.Type, E_NONE, "We already have object "+objIDstr+", ignoring received object.")
 	} else {
-		
-		_, err := p.objectManager.Put(msg.Object)
+
+		_, err := p.Store.PutObject(msg.Object)
 		if err != nil {
 			p.err(msg.Type, E_NONE, "Error storing object: "+err.Error())
 			return
@@ -115,20 +115,20 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 		p.log(msg.Type, E_NONE, "Object "+objIDstr+" stored successfully")
 
 		if msg.Object.ObjectType() == OBJ_TRANSACTION {
-			err = p.objectManager.PutFee(objID, fee)
+			err = p.Store.PutFee(objID, fee)
 			if err != nil {
 				p.err(msg.Type, E_NONE, "Error storing fee for object: "+err.Error())
 			}
 		}
 
 		// Notify pending blocks that this object is now available
-		pendingBlocks := p.objectManager.PendingBlocks[objID]
+		pendingBlocks := p.Store.PendingBlocks[objID]
 		for _, pending := range pendingBlocks {
 			blk := pending.Block
 			_, _, code, err := p.ValidateObject(blk)
 			if code == E_NONE && err == nil {
 				p.log(MSG_OBJECT, E_NONE, "Pending block "+objIDstr+" is now valid with new object "+objIDstr)
-				_, err := p.objectManager.Put(blk)
+				_, err := p.Store.PutObject(blk)
 				if err != nil {
 					p.err(MSG_OBJECT, E_NONE, "Error storing pending block: "+err.Error())
 					continue
@@ -156,7 +156,7 @@ func (p *Peer) handleObject(msg *ObjectMessage) {
 
 			}
 		}
-		delete(p.objectManager.PendingBlocks, objID)
+		delete(p.Store.PendingBlocks, objID)
 
 		// gossip!
 		BroadcastIHaveObject(objID)
@@ -172,7 +172,26 @@ func (p *Peer) handleMempool(msg *MempoolMessage) {
 }
 
 func (p *Peer) handleGetChainTip() {
-	p.log(MSG_GETCHAINTIP, E_NONE, "not handled yet")
+
+	exists, err := p.Store.ExistsChaintip()
+	if err != nil {
+		p.err(MSG_GETCHAINTIP, E_NONE, "Error checking if chain tip exists: "+err.Error())
+		return
+	}
+	if exists {
+		tip, _, err := p.Store.GetChaintip()
+		if err != nil {
+			p.err(MSG_GETCHAINTIP, E_NONE, "Error retrieving chain tip: "+err.Error())
+			return
+		}
+		err = p.SendChainTip(tip)
+		if err != nil {
+			p.err(MSG_GETCHAINTIP, E_NONE, "Error sending chain tip: "+err.Error())
+		}
+	} else {
+		p.log(MSG_GETCHAINTIP, E_NONE, "No chain tip found in store")
+		p.SendError(E_INTERNAL_ERROR, "No chain tip found")
+	}
 }
 
 func (p *Peer) handleChainTip(msg *ChainTipMessage) {

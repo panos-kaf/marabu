@@ -4,6 +4,7 @@ import (
 	"marabu/internal/crypto"
 	"marabu/internal/messages"
 	"math/big"
+	"time"
 
 	"fmt"
 )
@@ -67,12 +68,12 @@ func (p *Peer) ValidateTransaction(tx *T_Transaction) (T_Picabu, ErrorCode, erro
 	for i, input := range tx.Inputs {
 		outpoint := input.Outpoint
 
-		exists, err := p.objectManager.Exists(outpoint.Txid)
+		exists, err := p.Store.ExistsObject(outpoint.Txid)
 		if !exists || err != nil {
 			return ZERO_PICABU, E_UNKNOWN_OBJECT, fmt.Errorf("Referenced transaction %s for input %d does not exist", outpoint.Txid, i)
 		}
 
-		obj, err := p.objectManager.Get(outpoint.Txid)
+		obj, err := p.Store.GetObject(outpoint.Txid)
 		if err != nil {
 			return ZERO_PICABU, E_UNKNOWN_OBJECT, fmt.Errorf("Failed to fetch referenced transaction")
 		}
@@ -134,11 +135,15 @@ func (p *Peer) ValidateTransaction(tx *T_Transaction) (T_Picabu, ErrorCode, erro
 }
 
 func (p *Peer) ValidateCoinbase(cb *T_CoinbaseTransaction) (T_Picabu, ErrorCode, error) {
-
 	return ZERO_PICABU, E_NONE, nil
 }
 
 func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
+
+	now := time.Now().Unix()
+	if int64(blk.Created) > now {
+		return E_INVALID_BLOCK_TIMESTAMP, fmt.Errorf("Block timestamp %d comes from the future :o", blk.Created)
+	}
 
 	blockid, err := crypto.HashObject(blk)
 	if err != nil {
@@ -157,18 +162,42 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 		return E_INVALID_BLOCK_POW, fmt.Errorf("Invalid PoW for block %s", blockid)
 	}
 
-	utxos := make(map[UTXOKey]messages.T_TxOutput)
-
 	isGenesis := blk.Previd == nil
+
+	if !isGenesis {
+		exists, err := p.Store.ExistsObject(*blk.Previd)
+		if err != nil {
+			return E_INTERNAL_ERROR, fmt.Errorf("Error checking existence of parent block %s: %v", *blk.Previd, err)
+		}
+		if !exists {
+			p.Store.AddPendingBlock(p.addr, T_HashID(blockid), blk)
+			BroadcastGetObject(T_HashID(blockid))
+			return E_UNKNOWN_OBJECT, fmt.Errorf("Parent block %s not found. Asked peers for it", *blk.Previd)
+		}
+		prevObj, err := p.Store.GetObject(*blk.Previd)
+		if err != nil {
+			return E_INTERNAL_ERROR, fmt.Errorf("Failed to fetch parent block %s: %v", *blk.Previd, err)
+		}
+		prevBlock := prevObj.(*T_Block)
+
+		if blk.Created <= prevBlock.Created {
+			return E_INVALID_BLOCK_TIMESTAMP, fmt.Errorf("Block timestamp %d is earlier than its parent's timestamp %d", blk.Created, prevBlock.Created)
+		}
+	}
+
+	utxos := make(map[UTXOKey]messages.T_TxOutput)
+	var height uint64
 
 	if isGenesis {
 		p.logInfo(fmt.Sprintf("Block %s is the genesis block, so UTXO is empty", blockid))
+		height = 0
 	} else {
-		UTXO, err := p.objectManager.GetUTXO(*blk.Previd)
-		utxos = UTXO.UTXOs
+		UTXO, err := p.Store.GetUTXO(*blk.Previd)
 		if err != nil {
 			return E_UNKNOWN_OBJECT, fmt.Errorf("Could not find UTXO for block %s: %v", *blk.Previd, err)
 		}
+		utxos = UTXO.UTXOs
+		height = UTXO.Height + 1
 	}
 
 	hasCoinbase := false
@@ -178,17 +207,17 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 	fees := new(big.Int)
 
 	for index, txid := range blk.Txids {
-		exists, err := p.objectManager.Exists(txid)
+		exists, err := p.Store.ExistsObject(txid)
 		if err != nil {
 			return E_INTERNAL_ERROR, fmt.Errorf("Error checking existence of transaction %s: %v", txid, err)
 		}
 		if !exists {
-			p.objectManager.AddPendingBlock(p.addr, txid, blk)
+			p.Store.AddPendingBlock(p.addr, txid, blk)
 			BroadcastGetObject(txid)
 			return E_UNKNOWN_OBJECT, fmt.Errorf("Block references transactions we don't have. Asked peers for them")
 		} else {
 
-			tx, err := p.objectManager.Get(txid)
+			tx, err := p.Store.GetObject(txid)
 			if err != nil {
 				return E_INTERNAL_ERROR, fmt.Errorf("Failed to fetch referenced transaction %s: %v", txid, err)
 			}
@@ -243,16 +272,16 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 				if index != 0 {
 					return E_INVALID_BLOCK_COINBASE, fmt.Errorf("Only the first transaction in the block can be a coinbase, found one at index %d", index)
 				}
+
+				if uint64(*cbTx.Height) != height {
+					return E_INVALID_BLOCK_COINBASE, fmt.Errorf("Coinbase transaction has height %d, while its block has height %d", *cbTx.Height, height)
+				}
+
 				utxos[UTXOKey{Txid: cbID, Index: 0}] = cbTx.Outputs[0]
 
 			default:
 				return E_INTERNAL_ERROR, fmt.Errorf("Referenced object is of unknown type")
 			}
-
-			// at this point, the TX is structurally valid
-			// so we will try to add it to the UTXO set.
-			// appendToUTXO(txid)
-
 		}
 	}
 
@@ -274,10 +303,34 @@ func (p *Peer) ValidateBlock(blk *T_Block) (ErrorCode, error) {
 	newUTXO := UTXOSet{
 		UTXOs:   utxos,
 		BlockID: T_HashID(blockid),
+		Height:  height,
 	}
-	err = p.objectManager.PutUTXO(T_HashID(blockid), newUTXO)
+	err = p.Store.PutUTXO(T_HashID(blockid), newUTXO)
 	if err != nil {
 		return E_INTERNAL_ERROR, fmt.Errorf("Failed to update UTXO set for block %s: %v", blockid, err)
+	}
+
+	hasChaintip, err := p.Store.ExistsChaintip()
+	if err != nil {
+		return E_INTERNAL_ERROR, fmt.Errorf("Failed to check for existing chaintip: %v", err)
+	}
+
+	var currentHeight uint64
+
+	if hasChaintip {
+		_, currentHeight, err = p.Store.GetChaintip()
+		if err != nil {
+			return E_INTERNAL_ERROR, fmt.Errorf("Failed to get current chaintip for block validation: %v", err)
+		}
+	}
+
+	if !hasChaintip || height > currentHeight {
+		err = p.Store.PutChaintip(T_HashID(blockid), height)
+		if err != nil {
+			return E_INTERNAL_ERROR, fmt.Errorf("Failed to update chaintip for block %s: %v", blockid, err)
+		} else {
+			p.logInfo(fmt.Sprintf("Updated chaintip to block %s at height %d (previous height: %d)", blockid, height, currentHeight))
+		}
 	}
 
 	return E_NONE, nil
