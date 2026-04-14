@@ -3,10 +3,12 @@
 package bootstrap
 
 import (
-	"fmt"
-	"marabu/internal/messages"
+	"marabu/internal/discovery"
 	"marabu/internal/peer"
 	"marabu/internal/storage"
+	"marabu/internal/types"
+
+	"fmt"
 	"net"
 	"strconv"
 )
@@ -15,8 +17,8 @@ import (
 func StartNode(Store *storage.Store) {
 	go peer.StartServer(18018, Store)
 
-	for _, p := range peer.BOOTSTRAP_PEERS {
-		go func(p messages.T_Peer) {
+	for _, p := range discovery.BOOTSTRAP_PEERS {
+		go func(p types.Peer) {
 			host, portStr, _ := net.SplitHostPort(string(p))
 			port, _ := strconv.Atoi(portStr)
 			err := peer.StartClient(host, port, Store)

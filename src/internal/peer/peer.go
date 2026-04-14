@@ -3,8 +3,11 @@ package peer
 import (
 	"bufio"
 	"fmt"
-	"marabu/internal/messages"
+	"marabu/internal/protocol"
 	"marabu/internal/storage"
+	"marabu/internal/types"
+	"marabu/internal/validation"
+
 	"net"
 	"strconv"
 	"strings"
@@ -27,6 +30,7 @@ type Peer struct {
 	done              chan struct{}
 	role              string
 	Store             *storage.Store
+	Validator         *validation.Validator
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -38,12 +42,13 @@ func NewPeer(conn net.Conn,
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
-		conn:   conn,
-		addr:   addr,
-		buffer: make([]byte, 0),
-		role:   role,
-		Store:  Store,
-		done:   make(chan struct{}),
+		conn:      conn,
+		addr:      addr,
+		buffer:    make([]byte, 0),
+		role:      role,
+		Store:     Store,
+		Validator: validation.NewValidator(Store),
+		done:      make(chan struct{}),
 	}
 
 	connectedPeersMutex.Lock()
@@ -86,8 +91,8 @@ func CleanupPendingBlocks(om *storage.Store) {
 			connectedPeersMutex.Unlock()
 
 			if exists {
-				expiredPeer.SendError(E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
-				expiredPeer.log(MSG_ERROR, E_UNFINDABLE_OBJECT, fmt.Sprintf("Pending block with txid %s is unfindable. Notifying peer %s", expired.Txid, expired.Peer))
+				expiredPeer.SendError(types.E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
+				expiredPeer.log(types.MSG_ERROR, types.E_UNFINDABLE_OBJECT, fmt.Sprintf("Pending block with txid %s is unfindable. Notifying peer %s", expired.Txid, expired.Peer))
 			}
 		}
 	}
@@ -144,58 +149,58 @@ func (p *Peer) handleMessage(raw string) {
 	}
 
 	// Unmarshal and validate message
-	var msg Message
-	msg, err := messages.UnmarshalMessage(raw)
+	var msg types.Message
+	msg, err := protocol.UnmarshalMessage(raw)
 
 	if err != nil {
 		p.errInfo("Invalid message: " + err.Error())
-		p.SendError(E_INVALID_FORMAT, "Could not validate JSON message: "+err.Error())
+		p.SendError(types.E_INVALID_FORMAT, "Could not validate JSON message: "+err.Error())
 		if !p.handshakeComplete {
 			p.disconnect()
 		}
 		return
 	}
 
-	errCode := E_NONE
-	if msg.MessageType() == MSG_ERROR {
-		errCode = msg.(*ErrorMessage).Name
+	errCode := types.E_NONE
+	if msg.MessageType() == types.MSG_ERROR {
+		errCode = msg.(*protocol.Error).Name
 	}
 	p.logMessage(msg.MessageType(), errCode, recv)
 
-	if !p.handshakeComplete && msg.MessageType() != messages.MSG_HELLO {
-		p.errMessage(msg.MessageType(), E_NONE, "Failed handshake.Expected hello message first", false)
-		p.SendError(messages.E_INVALID_HANDSHAKE, "Handshake not completed, expected hello message but received "+string(msg.MessageType()))
+	if !p.handshakeComplete && msg.MessageType() != types.MSG_HELLO {
+		p.errMessage(msg.MessageType(), types.E_NONE, "Failed handshake.Expected hello message first", false)
+		p.SendError(types.E_INVALID_HANDSHAKE, "Handshake not completed, expected hello message but received "+string(msg.MessageType()))
 		p.disconnect()
 		return
 	}
 
 	// Dispatch based on type
 	switch m := msg.(type) {
-	case *HelloMessage:
+	case *protocol.Hello:
 		p.handleHello(m)
-	case *ErrorMessage:
+	case *protocol.Error:
 		p.handleError(m)
-	case *GetPeersMessage:
+	case *protocol.GetPeers:
 		p.handleGetPeers()
-	case *PeersMessage:
+	case *protocol.Peers:
 		p.handlePeers(m)
-	case *GetObjectMessage:
+	case *protocol.GetObject:
 		p.handleGetObject(m)
-	case *IHaveObjectMessage:
+	case *protocol.IHaveObject:
 		p.handleIHaveObject(m)
-	case *ObjectMessage:
+	case *protocol.Object:
 		p.handleObject(m)
-	case *GetMempoolMessage:
+	case *protocol.GetMempool:
 		p.handleGetMempool()
-	case *MempoolMessage:
+	case *protocol.Mempool:
 		p.handleMempool(m)
-	case *GetChainTipMessage:
+	case *protocol.GetChainTip:
 		p.handleGetChainTip()
-	case *ChainTipMessage:
+	case *protocol.ChainTip:
 		p.handleChainTip(m)
 	default:
 		p.errInfo("Unknown message type")
-		p.SendError(messages.E_INVALID_FORMAT, "Unknown protocol message")
+		p.SendError(types.E_INVALID_FORMAT, "Unknown protocol message")
 		p.disconnect()
 	}
 }

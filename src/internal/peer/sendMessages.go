@@ -2,13 +2,19 @@ package peer
 
 import (
 	"fmt"
-	"marabu/internal/messages"
+	"marabu/internal/protocol"
+	"marabu/internal/types"
+)
+
+const (
+	sent = true
+	recv = false
 )
 
 // SendMessage sends a message to the peer.
-// Not a top level function, intended to be paired with message constructors like messages.MakeHelloMessage().
+// Not a top level function, intended to be paired with message constructors like protocol.MakeHello().
 // If mkErr is not nil, it returns that error instead of sending the message.
-func (p *Peer) SendMessage(t MessageType, code ErrorCode, msg string, mkerr error) error {
+func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string, mkerr error) error {
 	if mkerr != nil {
 		return fmt.Errorf("Failed to create %s message: %w", t, mkerr)
 	}
@@ -23,8 +29,8 @@ func (p *Peer) SendMessage(t MessageType, code ErrorCode, msg string, mkerr erro
 }
 
 // Broadcast sends a message to all connected peers.
-// Intended to be paired with message constructors like messages.MakeHelloMessage().
-func Broadcast(t MessageType, code ErrorCode, msg string, mkErr error) {
+// Intended to be paired with message constructors like protocol.MakeHello().
+func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr error) {
 	if mkErr != nil {
 		globalError(fmt.Sprintf("Failed to create %s message: %v", t, mkErr))
 		return
@@ -48,58 +54,58 @@ func Broadcast(t MessageType, code ErrorCode, msg string, mkErr error) {
 // -- Top Level Send Functions for each message type --
 
 func (p *Peer) SendHello() error {
-	msg, err := messages.MakeHelloMessage()
-	return p.SendMessage(MSG_HELLO, E_NONE, msg, err)
+	msg, err := protocol.MakeHello()
+	return p.SendMessage(types.MSG_HELLO, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendError(name ErrorCode, description string) error {
-	msg, err := messages.MakeErrorMessage(name, T_BuString(description))
-	return p.SendMessage(MSG_ERROR, name, msg, err)
+func (p *Peer) SendError(name types.ErrorCode, description string) error {
+	msg, err := protocol.MakeError(name, types.BuString(description))
+	return p.SendMessage(types.MSG_ERROR, name, msg, err)
 }
 
 func (p *Peer) SendGetPeers() error {
-	msg, err := messages.MakeGetPeersMessage()
-	return p.SendMessage(MSG_GETPEERS, E_NONE, msg, err)
+	msg, err := protocol.MakeGetPeers()
+	return p.SendMessage(types.MSG_GETPEERS, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendPeers(peers T_Peers) error {
-	msg, err := messages.MakePeersMessage(peers)
-	return p.SendMessage(MSG_PEERS, E_NONE, msg, err)
+func (p *Peer) SendPeers(peers types.Peers) error {
+	msg, err := protocol.MakePeers(peers)
+	return p.SendMessage(types.MSG_PEERS, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendGetObject(objectID T_HashID) error {
-	msg, err := messages.MakeGetObjectMessage(objectID)
-	return p.SendMessage(MSG_GETOBJECT, E_NONE, msg, err)
+func (p *Peer) SendGetObject(objectID types.HashID) error {
+	msg, err := protocol.MakeGetObject(objectID)
+	return p.SendMessage(types.MSG_GETOBJECT, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendIHaveObject(objectID T_HashID) error {
-	msg, err := messages.MakeIHaveObjectMessage(objectID)
-	return p.SendMessage(MSG_IHAVEOBJECT, E_NONE, msg, err)
+func (p *Peer) SendIHaveObject(objectID types.HashID) error {
+	msg, err := protocol.MakeIHaveObject(objectID)
+	return p.SendMessage(types.MSG_IHAVEOBJECT, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendObject(obj messages.Object) error {
-	msg, err := messages.MakeObjectMessage(obj)
-	return p.SendMessage(MSG_OBJECT, E_NONE, msg, err)
+func (p *Peer) SendObject(obj types.Object) error {
+	msg, err := protocol.MakeObject(obj)
+	return p.SendMessage(types.MSG_OBJECT, types.E_NONE, msg, err)
 }
 
 func (p *Peer) SendGetMempool() error {
-	msg, err := messages.MakeGetMempoolMessage()
-	return p.SendMessage(MSG_GETMEMPOOL, E_NONE, msg, err)
+	msg, err := protocol.MakeGetMempool()
+	return p.SendMessage(types.MSG_GETMEMPOOL, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendMempool(txIDs []T_HashID) error {
-	msg, err := messages.MakeMempoolMessage(txIDs)
-	return p.SendMessage(MSG_MEMPOOL, E_NONE, msg, err)
+func (p *Peer) SendMempool(txIDs []types.HashID) error {
+	msg, err := protocol.MakeMempool(txIDs)
+	return p.SendMessage(types.MSG_MEMPOOL, types.E_NONE, msg, err)
 }
 
 func (p *Peer) SendGetChainTip() error {
-	msg, err := messages.MakeGetChainTipMessage()
-	return p.SendMessage(MSG_GETCHAINTIP, E_NONE, msg, err)
+	msg, err := protocol.MakeGetChainTip()
+	return p.SendMessage(types.MSG_GETCHAINTIP, types.E_NONE, msg, err)
 }
 
-func (p *Peer) SendChainTip(chainTip T_HashID) error {
-	msg, err := messages.MakeChainTipMessage(chainTip)
-	return p.SendMessage(MSG_CHAINTIP, E_NONE, msg, err)
+func (p *Peer) SendChainTip(chainTip types.HashID) error {
+	msg, err := protocol.MakeChainTip(chainTip)
+	return p.SendMessage(types.MSG_CHAINTIP, types.E_NONE, msg, err)
 }
 
 func (p *Peer) Greet() {
@@ -107,53 +113,52 @@ func (p *Peer) Greet() {
 	p.SendGetPeers()
 }
 
-
 // -- Top level broadcast functions for each message type --
 
 func BroadcastHello() {
-	Broadcast(MSG_HELLO, E_NONE, "Broadcasting hello message to all peers", nil)
+	Broadcast(types.MSG_HELLO, types.E_NONE, "Broadcasting hello message to all peers", nil)
 }
 
 func BroadcastGetPeers() {
-	Broadcast(MSG_GETPEERS, E_NONE, "Broadcasting getpeers message to all peers", nil)
+	Broadcast(types.MSG_GETPEERS, types.E_NONE, "Broadcasting getpeers message to all peers", nil)
 }
 
-func BroadcastPeers(peers T_Peers) {
-	msg, err := messages.MakePeersMessage(peers)
-	Broadcast(MSG_PEERS, E_NONE, msg, err)
+func BroadcastPeers(peers types.Peers) {
+	msg, err := protocol.MakePeers(peers)
+	Broadcast(types.MSG_PEERS, types.E_NONE, msg, err)
 }
 
-func BroadcastGetObject(objectID T_HashID) {
-	msg, err := messages.MakeGetObjectMessage(objectID)
-	Broadcast(MSG_GETOBJECT, E_NONE, msg, err)
+func BroadcastGetObject(objectID types.HashID) {
+	msg, err := protocol.MakeGetObject(objectID)
+	Broadcast(types.MSG_GETOBJECT, types.E_NONE, msg, err)
 }
 
-func BroadcastIHaveObject(objectID T_HashID) {
-	msg, err := messages.MakeIHaveObjectMessage(objectID)
-	Broadcast(MSG_IHAVEOBJECT, E_NONE, msg, err)
+func BroadcastIHaveObject(objectID types.HashID) {
+	msg, err := protocol.MakeIHaveObject(objectID)
+	Broadcast(types.MSG_IHAVEOBJECT, types.E_NONE, msg, err)
 }
 
-func BroadcastObject(obj messages.Object) {
-	msg, err := messages.MakeObjectMessage(obj)
-	Broadcast(MSG_OBJECT, E_NONE, msg, err)
+func BroadcastObject(obj types.Object) {
+	msg, err := protocol.MakeObject(obj)
+	Broadcast(types.MSG_OBJECT, types.E_NONE, msg, err)
 }
 
 func BroadcastGetMempool() {
-	msg, err := messages.MakeGetMempoolMessage()
-	Broadcast(MSG_GETMEMPOOL, E_NONE, msg, err)
+	msg, err := protocol.MakeGetMempool()
+	Broadcast(types.MSG_GETMEMPOOL, types.E_NONE, msg, err)
 }
 
-func BroadcastMempool(txIDs []T_HashID) {
-	msg, err := messages.MakeMempoolMessage(txIDs)
-	Broadcast(MSG_MEMPOOL, E_NONE, msg, err)
+func BroadcastMempool(txIDs []types.HashID) {
+	msg, err := protocol.MakeMempool(txIDs)
+	Broadcast(types.MSG_MEMPOOL, types.E_NONE, msg, err)
 }
 
 func BroadcastGetChainTip() {
-	msg, err := messages.MakeGetChainTipMessage()
-	Broadcast(MSG_GETCHAINTIP, E_NONE, msg, err)
+	msg, err := protocol.MakeGetChainTip()
+	Broadcast(types.MSG_GETCHAINTIP, types.E_NONE, msg, err)
 }
 
-func BroadcastChainTip(chainTip T_HashID) {
-	msg, err := messages.MakeChainTipMessage(chainTip)
-	Broadcast(MSG_CHAINTIP, E_NONE, msg, err)
+func BroadcastChainTip(chainTip types.HashID) {
+	msg, err := protocol.MakeChainTip(chainTip)
+	Broadcast(types.MSG_CHAINTIP, types.E_NONE, msg, err)
 }

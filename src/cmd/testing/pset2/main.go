@@ -180,7 +180,7 @@ func main() {
 	p1.send(invalidConsTx)
 	expectError(p1, "INVALID_TX_CONSERVATION")
 
-	// Test 8: INVALID_TX_SIGNATURE Error (Bad T_Signature)
+	// Test 8: INVALID_TX_SIGNATURE Error (Bad types.Signature)
 	fmt.Println("\n[Test 8] INVALID_TX_SIGNATURE Error")
 	badSigTx := `{"object":{"inputs":[{"outpoint":{"index":0,"txid":"ada6656818fec7c7ad431b17adb7b8abb136dd500c9f7b05568ec28f5ba48c63"},"sig":"51b9cef44429547e0061517f6d2b196bfa8b1a2a37870e5832489a6aafe32a7d8adf037170a396e68957c26480d6bca86f0ae85d4a6b4ef7a8752cb6da9ca903"}],"outputs":[{"pubkey":"39cd95f5cac18db4ca13e9a47b507811da4a6a158ba4a2f89e183e5123c52ae4","value":10}],"type":"transaction"},"type":"object"}`
 	p1.send(badSigTx)

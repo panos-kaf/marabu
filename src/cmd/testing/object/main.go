@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"marabu/internal/crypto"
-	"marabu/internal/messages"
+	"marabu/internal/protocol"
+	"marabu/internal/types"
 	"net"
 	"strings"
 	"time"
@@ -92,7 +93,7 @@ func waitForAny(p *Peer, expected ...string) string {
 --------------------------*/
 
 func handshake(p *Peer) {
-	p.send(must(messages.MakeHelloMessage()))
+	p.send(must(protocol.MakeHello()))
 
 	seenHello := false
 	seenGetPeers := false
@@ -120,25 +121,25 @@ func handshake(p *Peer) {
 --------------------------*/
 
 // 1a
-func testSelfObjectRetrieval(p *Peer, objID messages.T_HashID, objMsg string) {
+func testSelfObjectRetrieval(p *Peer, objID types.HashID, objMsg string) {
 	fmt.Println("\n[Test 1a] Self object retrieval")
 
 	p.send(objMsg)
-	p.send(must(messages.MakeGetObjectMessage(objID)))
+	p.send(must(protocol.MakeGetObject(objID)))
 
 	waitFor(p, "object")
 }
 
 // 1d
-func testIHaveFlow(p *Peer, objID messages.T_HashID) {
+func testIHaveFlow(p *Peer, objID types.HashID) {
 	fmt.Println("\n[Test 1d] ihaveobject -> getobject")
 
-	p.send(must(messages.MakeIHaveObjectMessage(objID)))
+	p.send(must(protocol.MakeIHaveObject(objID)))
 	waitFor(p, "getobject")
 }
 
 // 1b + 1c
-func testGossip(p1, p2 *Peer, objID messages.T_HashID, objMsg string) {
+func testGossip(p1, p2 *Peer, objID types.HashID, objMsg string) {
 	fmt.Println("\n[Test 1b/1c] Gossip between peers")
 
 	p1.send(objMsg)
@@ -147,7 +148,7 @@ func testGossip(p1, p2 *Peer, objID messages.T_HashID, objMsg string) {
 	waitFor(p2, "ihaveobject")
 
 	// request object
-	p2.send(must(messages.MakeGetObjectMessage(objID)))
+	p2.send(must(protocol.MakeGetObject(objID)))
 	waitFor(p2, "object")
 }
 
@@ -168,20 +169,20 @@ func expectError(p *Peer, expected string) {
 func testUnknownObject(p *Peer) {
 	fmt.Println("\n[Test 2a(i)] UNKNOWN_OBJECT")
 
-	idx := messages.T_BuInt(0)
-	tx := messages.T_Transaction{
-		Type: messages.OBJ_TRANSACTION,
-		Inputs: []messages.T_TxInput{
+	idx := types.BuInt(0)
+	tx := types.Transaction{
+		Type: types.OBJ_TRANSACTION,
+		Inputs: []types.TxInput{
 			{
-				Outpoint: messages.T_Outpoint{
-					Txid:  messages.T_HashID("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
+				Outpoint: types.Outpoint{
+					Txid:  types.HashID("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"),
 					Index: &idx,
 				},
 			},
 		},
 	}
 
-	p.send(must(messages.MakeObjectMessage(tx)))
+	p.send(must(protocol.MakeObject(tx)))
 	expectError(p, "UNKNOWN_OBJECT")
 }
 
@@ -196,73 +197,73 @@ func testUnknownObject(p *Peer) {
 // "type":"object"}
 
 // 2a(ii)
-func testInvalidSignature(p *Peer, coinbaseID messages.T_HashID) {
+func testInvalidSignature(p *Peer, coinbaseID types.HashID) {
 	fmt.Println("\n[Test 2a(ii)] INVALID_TX_SIGNATURE")
 
-	v := messages.NewPicabu(10)
-	idx := messages.T_BuInt(0)
+	v := types.NewPicabu(10)
+	idx := types.BuInt(0)
 
-	tx := messages.T_Transaction{
-		Type: messages.OBJ_TRANSACTION,
-		Inputs: []messages.T_TxInput{
+	tx := types.Transaction{
+		Type: types.OBJ_TRANSACTION,
+		Inputs: []types.TxInput{
 			{
-				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
+				Outpoint: types.Outpoint{Txid: coinbaseID, Index: &idx},
 				Sig:      nil,
 			},
 		},
-		Outputs: []messages.T_TxOutput{
+		Outputs: []types.TxOutput{
 			{Pubkey: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", Value: &v},
 		},
 	}
 
-	p.send(must(messages.MakeObjectMessage(tx)))
+	p.send(must(protocol.MakeObject(tx)))
 	expectError(p, "INVALID_TX_SIGNATURE")
 }
 
 // 2a(iii)
-func testInvalidOutpoint(p *Peer, coinbaseID messages.T_HashID) {
+func testInvalidOutpoint(p *Peer, coinbaseID types.HashID) {
 	fmt.Println("\n[Test 2a(iii)] INVALID_TX_OUTPOINT")
 
-	v := messages.NewPicabu(10)
-	idx := messages.T_BuInt(999)
+	v := types.NewPicabu(10)
+	idx := types.BuInt(999)
 
-	tx := messages.T_Transaction{
-		Type: messages.OBJ_TRANSACTION,
-		Inputs: []messages.T_TxInput{
+	tx := types.Transaction{
+		Type: types.OBJ_TRANSACTION,
+		Inputs: []types.TxInput{
 			{
-				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
+				Outpoint: types.Outpoint{Txid: coinbaseID, Index: &idx},
 			},
 		},
-		Outputs: []messages.T_TxOutput{
+		Outputs: []types.TxOutput{
 			{Pubkey: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", Value: &v},
 		},
 	}
 
-	p.send(must(messages.MakeObjectMessage(tx)))
+	p.send(must(protocol.MakeObject(tx)))
 	expectError(p, "INVALID_TX_OUTPOINT")
 }
 
 // 2a(iv)
-func testConservation(p *Peer, coinbaseID messages.T_HashID, sig messages.T_Signature) {
+func testConservation(p *Peer, coinbaseID types.HashID, sig types.Signature) {
 	fmt.Println("\n[Test 2a(iv)] INVALID_TX_CONSERVATION")
 
-	v := messages.NewPicabu(50000000001)
-	idx := messages.T_BuInt(0)
+	v := types.NewPicabu(50000000001)
+	idx := types.BuInt(0)
 
-	tx := messages.T_Transaction{
-		Type: messages.OBJ_TRANSACTION,
-		Inputs: []messages.T_TxInput{
+	tx := types.Transaction{
+		Type: types.OBJ_TRANSACTION,
+		Inputs: []types.TxInput{
 			{
-				Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
+				Outpoint: types.Outpoint{Txid: coinbaseID, Index: &idx},
 				Sig:      &sig,
 			},
 		},
-		Outputs: []messages.T_TxOutput{
+		Outputs: []types.TxOutput{
 			{Pubkey: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", Value: &v},
 		},
 	}
 
-	p.send(must(messages.MakeObjectMessage(tx)))
+	p.send(must(protocol.MakeObject(tx)))
 	expectError(p, "INVALID_TX_CONSERVATION")
 }
 
@@ -298,20 +299,20 @@ func main() {
 	/* -------------------------
 	   Coinbase
 	--------------------------*/
-	h := messages.T_BuInt(0)
-	v := messages.NewPicabu(50000000000)
+	h := types.BuInt(0)
+	v := types.NewPicabu(50000000000)
 
-	coinbase := messages.T_CoinbaseTransaction{
-		Type:   messages.OBJ_TRANSACTION,
+	coinbase := types.CoinbaseTransaction{
+		Type:   types.OBJ_TRANSACTION,
 		Height: &h,
-		Outputs: []messages.T_TxOutput{
+		Outputs: []types.TxOutput{
 			{Pubkey: "39cd95f5cac18db4ca13e9a47b507811da4a6a158ba4a2f89e183e5123c52ae4", Value: &v},
 		},
 	}
 
 	coinbaseIDstr, _ := crypto.HashObject(coinbase)
-	coinbaseID := messages.T_HashID(coinbaseIDstr)
-	coinbaseMsg := must(messages.MakeObjectMessage(coinbase))
+	coinbaseID := types.HashID(coinbaseIDstr)
+	coinbaseMsg := must(protocol.MakeObject(coinbase))
 
 	p1.send(coinbaseMsg)
 
@@ -322,14 +323,14 @@ func main() {
 	   Object exchange
 	--------------------------*/
 	testSelfObjectRetrieval(p1, coinbaseID, coinbaseMsg)
-	dummyHash := messages.T_HashID("0000000000000000000000000000000000000000000000000000000000001234")
+	dummyHash := types.HashID("0000000000000000000000000000000000000000000000000000000000001234")
 	testIHaveFlow(p1, dummyHash)
 	testGossip(p1, p2, coinbaseID, coinbaseMsg)
 
 	/* -------------------------
 	   Validation
 	--------------------------*/
-	sig := messages.T_Signature("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+	sig := types.Signature("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
 
 	testUnknownObject(p1)
 	testInvalidSignature(p1, coinbaseID)

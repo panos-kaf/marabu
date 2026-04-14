@@ -3,7 +3,7 @@ package logs
 import (
 	"fmt"
 	"log"
-	"marabu/internal/messages"
+	"marabu/internal/types"
 )
 
 const (
@@ -22,8 +22,8 @@ const (
 )
 
 type LogEntry struct {
-	MessageType messages.MessageType
-	ErrorCode   messages.ErrorCode
+	MessageType types.MessageType
+	ErrorCode   types.ErrorCode
 	ID          int
 	Direction   string
 	Addr        string
@@ -32,19 +32,19 @@ type LogEntry struct {
 	Role        string
 }
 
-func MessageTypeColor(mtype messages.MessageType) string {
+func MessageTypeColor(mtype types.MessageType) string {
 	switch mtype {
-	case messages.MSG_HELLO:
+	case types.MSG_HELLO:
 		return GREEN
-	case messages.MSG_ERROR:
+	case types.MSG_ERROR:
 		return RED
-	case messages.MSG_GETPEERS, messages.MSG_PEERS:
+	case types.MSG_GETPEERS, types.MSG_PEERS:
 		return CYAN
-	case messages.MSG_GETOBJECT, messages.MSG_IHAVEOBJECT, messages.MSG_OBJECT:
+	case types.MSG_GETOBJECT, types.MSG_IHAVEOBJECT, types.MSG_OBJECT:
 		return YELLOW
-	case messages.MSG_GETMEMPOOL, messages.MSG_MEMPOOL:
+	case types.MSG_GETMEMPOOL, types.MSG_MEMPOOL:
 		return BLUE
-	case messages.MSG_GETCHAINTIP, messages.MSG_CHAINTIP:
+	case types.MSG_GETCHAINTIP, types.MSG_CHAINTIP:
 		return MAGENTA
 	default:
 		return RESET
@@ -77,15 +77,15 @@ func Log(m LogEntry) {
 	msg := fmt.Sprintf("%s%s%s", BOLD, rolecolor, id)
 
 	label := string(m.MessageType)
-	if m.MessageType == messages.MSG_ERROR && m.ErrorCode != messages.E_NONE {
+	if m.MessageType == types.MSG_ERROR && m.ErrorCode != types.E_NONE {
 		label = string(m.ErrorCode)
 	}
 
-	if m.MessageType != messages.MSG_NONE {
+	if m.MessageType != types.MSG_NONE {
 		msg = fmt.Sprintf("%s%s[%s]", msg, msgcolor, label)
 	}
 
-	if m.Direction != "" && m.MessageType != messages.MSG_NONE {
+	if m.Direction != "" && m.MessageType != types.MSG_NONE {
 		direction := ""
 		switch m.Direction {
 		case "sent":
@@ -103,4 +103,30 @@ func Log(m LogEntry) {
 	}
 
 	log.Print(msg)
+}
+
+func GlobalLog(msg string) {
+	entry := LogEntry{
+		MessageType: types.MSG_NONE,
+		ErrorCode:   types.E_NONE,
+		ID:          0,
+		Addr:        "",
+		IsError:     false,
+		Message:     msg,
+		Role:        "",
+	}
+	Log(entry)
+}
+
+func GlobalError(msg string) {
+	entry := LogEntry{
+		MessageType: types.MSG_NONE,
+		ErrorCode:   types.E_NONE,
+		ID:          0,
+		Addr:        "",
+		IsError:     true,
+		Message:     msg,
+		Role:        "",
+	}
+	Log(entry)
 }

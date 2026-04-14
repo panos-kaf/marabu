@@ -2,24 +2,24 @@ package storage
 
 import (
 	"encoding/json"
-	"marabu/internal/messages"
+	"marabu/internal/types"
 )
 
-type UTXOKey = messages.UTXOKey
-type UTXOSet = messages.UTXOSet
+type UTXOKey = types.UTXOKey
+type UTXOSet = types.UTXOSet
 
 type UTXORecord struct {
-	Key   UTXOKey             `json:"key"`
-	Value messages.T_TxOutput `json:"value"`
+	Key   UTXOKey        `json:"key"`
+	Value types.TxOutput `json:"value"`
 }
 
 type UTXOStorageData struct {
-	BlockID T_HashID     `json:"blockid"`
+	BlockID types.HashID `json:"blockid"`
 	Height  uint64       `json:"height"`
 	Records []UTXORecord `json:"records"`
 }
 
-func (s *Store) GetUTXO(blockid T_HashID) (UTXOSet, error) {
+func (s *Store) GetUTXO(blockid types.HashID) (UTXOSet, error) {
 	key := []byte("utxo-" + string(blockid))
 	utxoRaw, err := s.db.Get(key, nil)
 	if err != nil {
@@ -35,7 +35,7 @@ func (s *Store) GetUTXO(blockid T_HashID) (UTXOSet, error) {
 	utxo := UTXOSet{
 		BlockID: data.BlockID,
 		Height:  data.Height,
-		UTXOs:   make(map[UTXOKey]messages.T_TxOutput),
+		UTXOs:   make(map[UTXOKey]types.TxOutput),
 	}
 
 	for _, record := range data.Records {
@@ -45,7 +45,7 @@ func (s *Store) GetUTXO(blockid T_HashID) (UTXOSet, error) {
 	return utxo, nil
 }
 
-func (s *Store) PutUTXO(blockid T_HashID, utxos UTXOSet) error {
+func (s *Store) PutUTXO(blockid types.HashID, utxos UTXOSet) error {
 	key := []byte("utxo-" + string(blockid))
 
 	var records []UTXORecord

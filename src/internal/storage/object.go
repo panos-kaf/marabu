@@ -2,7 +2,8 @@ package storage
 
 import (
 	"marabu/internal/crypto"
-	"marabu/internal/messages"
+	"marabu/internal/serialization"
+	"marabu/internal/types"
 	"time"
 
 	"encoding/json"
@@ -12,20 +13,18 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-type T_HashID = messages.T_HashID
-
 type PendingBlock struct {
-	Block     *messages.T_Block
+	Block     *types.Block
 	Timestamp time.Time
 	Peer      string
 }
 
 type Store struct {
 	db           *leveldb.DB
-	pendingFinds map[T_HashID][]chan messages.Object
+	pendingFinds map[types.HashID][]chan types.Object
 	mutex        sync.Mutex
 
-	PendingBlocks map[T_HashID][]PendingBlock
+	PendingBlocks map[types.HashID][]PendingBlock
 }
 
 func NewStore(path string) (*Store, error) {
@@ -35,16 +34,16 @@ func NewStore(path string) (*Store, error) {
 	}
 	return &Store{
 		db:            db,
-		pendingFinds:  make(map[T_HashID][]chan messages.Object),
-		PendingBlocks: make(map[T_HashID][]PendingBlock),
+		pendingFinds:  make(map[types.HashID][]chan types.Object),
+		PendingBlocks: make(map[types.HashID][]PendingBlock),
 	}, nil
 }
 
-func (s *Store) ExistsObject(id T_HashID) (bool, error) {
+func (s *Store) ExistsObject(id types.HashID) (bool, error) {
 	return s.db.Has([]byte(id), nil)
 }
 
-func (s *Store) GetObject(id T_HashID) (messages.Object, error) {
+func (s *Store) GetObject(id types.HashID) (types.Object, error) {
 	data, err := s.db.Get([]byte(id), nil)
 	if err != nil {
 		return nil, err
@@ -67,20 +66,20 @@ func (s *Store) GetObject(id T_HashID) (messages.Object, error) {
 		}
 
 		if heightProbe.Height != nil {
-			var cb messages.T_CoinbaseTransaction
+			var cb types.CoinbaseTransaction
 			if err := json.Unmarshal(data, &cb); err != nil {
 				return nil, err
 			}
 			return &cb, nil
 		} else {
-			var tx messages.T_Transaction
+			var tx types.Transaction
 			if err := json.Unmarshal(data, &tx); err != nil {
 				return nil, err
 			}
 			return &tx, nil
 		}
 	case "block":
-		var blk messages.T_Block
+		var blk types.Block
 		if err := json.Unmarshal(data, &blk); err != nil {
 			return nil, err
 		}
@@ -91,8 +90,8 @@ func (s *Store) GetObject(id T_HashID) (messages.Object, error) {
 	}
 }
 
-func (s *Store) PutObject(object messages.Object) (T_HashID, error) {
-	canon, err := messages.Canonicalize(object)
+func (s *Store) PutObject(object types.Object) (types.HashID, error) {
+	canon, err := serialization.Canonicalize(object)
 	if err != nil {
 		return "", err
 	}
@@ -110,17 +109,17 @@ func (s *Store) PutObject(object messages.Object) (T_HashID, error) {
 		return "", err
 	}
 
-	return T_HashID(id), nil
+	return types.HashID(id), nil
 }
 
-func (s *Store) FindObject(id T_HashID) (messages.Object, error) {
+func (s *Store) FindObject(id types.HashID) (types.Object, error) {
 	obj, err := s.GetObject(id)
 	if err == nil {
 		return obj, nil
 	}
 
 	s.mutex.Lock()
-	ch := make(chan messages.Object, 1)
+	ch := make(chan types.Object, 1)
 	s.pendingFinds[id] = append(s.pendingFinds[id], ch)
 	s.mutex.Unlock()
 
@@ -131,7 +130,7 @@ func (s *Store) FindObject(id T_HashID) (messages.Object, error) {
 	return result, nil
 }
 
-func (s *Store) notifyWaiters(id T_HashID, obj messages.Object) {
+func (s *Store) notifyWaiters(id types.HashID, obj types.Object) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for _, ch := range s.pendingFinds[id] {
@@ -141,7 +140,7 @@ func (s *Store) notifyWaiters(id T_HashID, obj messages.Object) {
 	delete(s.pendingFinds, id)
 }
 
-func (s *Store) AddPendingBlock(peer string, missingID T_HashID, block *messages.T_Block) {
+func (s *Store) AddPendingBlock(peer string, missingID types.HashID, block *types.Block) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	s.PendingBlocks[missingID] = append(s.PendingBlocks[missingID], PendingBlock{
@@ -153,16 +152,16 @@ func (s *Store) AddPendingBlock(peer string, missingID T_HashID, block *messages
 
 func (s *Store) CheckPendingBlocks() []struct {
 	Peer  string
-	Block *messages.T_Block
-	Txid  T_HashID
+	Block *types.Block
+	Txid  types.HashID
 } {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	now := time.Now()
 	var expired []struct {
 		Peer  string
-		Block *messages.T_Block
-		Txid  T_HashID
+		Block *types.Block
+		Txid  types.HashID
 	}
 
 	timeout := 5 * time.Second
@@ -173,8 +172,8 @@ func (s *Store) CheckPendingBlocks() []struct {
 			if now.Sub(blk.Timestamp) > timeout {
 				expired = append(expired, struct {
 					Peer  string
-					Block *messages.T_Block
-					Txid  T_HashID
+					Block *types.Block
+					Txid  types.HashID
 				}{blk.Peer, blk.Block, txid})
 			} else {
 				stillPending = append(stillPending, blk)

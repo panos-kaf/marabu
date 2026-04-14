@@ -2,21 +2,12 @@ package crypto
 
 import (
 	"fmt"
-	"marabu/internal/messages"
+	"marabu/internal/serialization"
+	"marabu/internal/types"
 	"math/big"
 
 	"golang.org/x/crypto/blake2s"
 )
-
-const (
-	TARGET_HEX = "00000000abc00000000000000000000000000000000000000000000000000000"
-)
-
-var TARGET = func() *big.Int {
-	n := new(big.Int)
-	n.SetString(TARGET_HEX, 16)
-	return n
-}
 
 // Hash computes the BLAKE2s hash of the input data and returns it as a hexadecimal string.
 func Hash(data []byte) (string, error) {
@@ -39,8 +30,8 @@ func HashBytes(b []byte) (string, error) {
 }
 
 // HashObject takes an object, canonicalizes it to JSON, and then computes the BLAKE2s hash of the canonical JSON representation. It returns the hash as a hexadecimal string.
-func HashObject(o messages.Object) (string, error) {
-	raw, err := messages.Canonicalize(o)
+func HashObject(o types.Object) (string, error) {
+	raw, err := serialization.Canonicalize(o)
 	if err != nil {
 		return "", err
 	}
@@ -59,5 +50,5 @@ func VerifyPoW(blockid string) (bool, error) {
 		return false, fmt.Errorf("Error parsing block ID as hex: %s", blockid)
 	}
 
-	return hashInt.Cmp(TARGET()) < 1, nil
+	return hashInt.Cmp(types.TARGET_BIGINT()) < 1, nil
 }

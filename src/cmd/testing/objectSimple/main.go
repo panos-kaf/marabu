@@ -4,7 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"marabu/internal/crypto"
-	"marabu/internal/messages"
+	"marabu/internal/protocol"
+	"marabu/internal/types"
 	"net"
 	"os"
 )
@@ -19,9 +20,9 @@ func receive(conn net.Conn) string {
 	return resp
 }
 
-func exchangeObject(objectID messages.T_HashID, objectMsg string, conn net.Conn, resp string) {
+func exchangeObject(objectID types.HashID, objectMsg string, conn net.Conn, resp string) {
 	// 1. Send ihaveobject
-	ihaveMsg, _ := messages.MakeIHaveObjectMessage(objectID)
+	ihaveMsg, _ := protocol.MakeIHaveObject(objectID)
 	send(conn, ihaveMsg)
 	fmt.Println("Sent ihaveobject")
 
@@ -39,7 +40,7 @@ func exchangeObject(objectID messages.T_HashID, objectMsg string, conn net.Conn,
 	fmt.Println("Received:", resp)
 
 	// 5. Send getobject for known object
-	getObjMsg, _ := messages.MakeGetObjectMessage(objectID)
+	getObjMsg, _ := protocol.MakeGetObject(objectID)
 	send(conn, getObjMsg)
 	fmt.Println("Sent getobject")
 
@@ -59,7 +60,7 @@ func main() {
 	defer conn.Close()
 
 	// 0. Greet the server
-	helloMsg, _ := messages.MakeHelloMessage()
+	helloMsg, _ := protocol.MakeHello()
 	send(conn, helloMsg)
 	fmt.Println("Sent hello")
 
@@ -71,14 +72,14 @@ func main() {
 	fmt.Println("Received:", resp)
 	// Parse and check for getpeers response
 
-	height := messages.T_BuInt(0)
-	val := messages.NewPicabu(50000000000)
+	height := types.BuInt(0)
+	val := types.NewPicabu(50000000000)
 
 	// 1. Coinbase transaction
-	coinbaseTx := messages.T_CoinbaseTransaction{
-		Type:   messages.OBJ_TRANSACTION,
+	coinbaseTx := types.CoinbaseTransaction{
+		Type:   types.OBJ_TRANSACTION,
 		Height: &height,
-		Outputs: []messages.T_TxOutput{
+		Outputs: []types.TxOutput{
 			{
 				Pubkey: "958f8add086cc348e229a3b6590c71b7d7754e42134a127a50648bf07969d9a0",
 				Value:  &val,
@@ -86,39 +87,39 @@ func main() {
 		},
 	}
 	coinbaseIDstr, _ := crypto.HashObject(coinbaseTx)
-	coinbaseID := messages.T_HashID(coinbaseIDstr)
-	coinbaseMsg, _ := messages.MakeObjectMessage(coinbaseTx)
-	fmt.Println("\n--- Coinbase T_Transaction Exchange ---")
+	coinbaseID := types.HashID(coinbaseIDstr)
+	coinbaseMsg, _ := protocol.MakeObject(coinbaseTx)
+	fmt.Println("\n--- Coinbase types.Transaction Exchange ---")
 	fmt.Printf("Coinbase object message:\n%s\n\n", coinbaseMsg)
 	exchangeObject(coinbaseID, coinbaseMsg, conn, resp)
 
 	// 2. Regular transaction
-	sig := messages.T_Signature("060bf7cbe141fecfebf6dafbd6ebbcff25f82e729a7770f4f3b1f81a7ec8a0ce4b287597e609b822111bbe1a83d682ef14f018f8a9143cef25ecc9a8b0c1c405")
-	idx := messages.T_BuInt(0)
-	val2 := messages.NewPicabu(10)
+	sig := types.Signature("060bf7cbe141fecfebf6dafbd6ebbcff25f82e729a7770f4f3b1f81a7ec8a0ce4b287597e609b822111bbe1a83d682ef14f018f8a9143cef25ecc9a8b0c1c405")
+	idx := types.BuInt(0)
+	val2 := types.NewPicabu(10)
 
-	input := messages.T_TxInput{
-		Outpoint: messages.T_Outpoint{Txid: coinbaseID, Index: &idx},
-		Sig:        &sig,
+	input := types.TxInput{
+		Outpoint: types.Outpoint{Txid: coinbaseID, Index: &idx},
+		Sig:      &sig,
 	}
 
-	val2 = messages.NewPicabu(10)
+	val2 = types.NewPicabu(10)
 
-	output := messages.T_TxOutput{
+	output := types.TxOutput{
 		Pubkey: "958f8add086cc348e229a3b6590c71b7d7754e42134a127a50648bf07969d9a0",
 		Value:  &val2,
 	}
 
-	regularTx := messages.T_Transaction{
-		Type:    messages.OBJ_TRANSACTION,
-		Inputs:  []messages.T_TxInput{input},
-		Outputs: []messages.T_TxOutput{output},
+	regularTx := types.Transaction{
+		Type:    types.OBJ_TRANSACTION,
+		Inputs:  []types.TxInput{input},
+		Outputs: []types.TxOutput{output},
 	}
 
 	regularIDstr, _ := crypto.HashObject(regularTx)
-	regularID := messages.T_HashID(regularIDstr)
-	regularMsg, _ := messages.MakeObjectMessage(regularTx)
-	fmt.Println("\n--- Regular T_Transaction Exchange ---")
+	regularID := types.HashID(regularIDstr)
+	regularMsg, _ := protocol.MakeObject(regularTx)
+	fmt.Println("\n--- Regular types.Transaction Exchange ---")
 	fmt.Printf("Regular object message:\n%s\n\n", regularMsg)
 	exchangeObject(regularID, regularMsg, conn, resp)
 }

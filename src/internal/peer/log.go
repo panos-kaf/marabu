@@ -2,38 +2,21 @@ package peer
 
 import (
 	"marabu/internal/logs"
+	"marabu/internal/types"
 )
 
 func globalLog(msg string) {
-	entry := logs.LogEntry{
-		MessageType: MSG_NONE,
-		ErrorCode:   E_NONE,
-		ID:          0,
-		Addr:        "",
-		IsError:     false,
-		Message:     msg,
-		Role:        "",
-	}
-	logs.Log(entry)
+	logs.GlobalLog(msg)
 }
 
 func globalError(msg string) {
-	entry := logs.LogEntry{
-		MessageType: MSG_NONE,
-		ErrorCode:   E_NONE,
-		ID:          0,
-		Addr:        "",
-		IsError:     true,
-		Message:     msg,
-		Role:        "",
-	}
-	logs.Log(entry)
+	logs.GlobalError(msg)
 }
 
 func (p *Peer) logInfo(message string) {
 	entry := logs.LogEntry{
-		MessageType: MSG_NONE,
-		ErrorCode:   E_NONE,
+		MessageType: types.MSG_NONE,
+		ErrorCode:   types.E_NONE,
 		ID:          p.ID,
 		Addr:        p.addr,
 		IsError:     false,
@@ -45,8 +28,8 @@ func (p *Peer) logInfo(message string) {
 
 func (p *Peer) errInfo(message string) {
 	entry := logs.LogEntry{
-		MessageType: MSG_NONE,
-		ErrorCode:   E_NONE,
+		MessageType: types.MSG_NONE,
+		ErrorCode:   types.E_NONE,
 		ID:          p.ID,
 		Addr:        p.addr,
 		IsError:     true,
@@ -56,7 +39,7 @@ func (p *Peer) errInfo(message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) log(mtype MessageType, code ErrorCode, message string) {
+func (p *Peer) log(mtype types.MessageType, code types.ErrorCode, message string) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -69,7 +52,7 @@ func (p *Peer) log(mtype MessageType, code ErrorCode, message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) err(mtype MessageType, code ErrorCode, message string) {
+func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -82,7 +65,7 @@ func (p *Peer) err(mtype MessageType, code ErrorCode, message string) {
 	logs.Log(entry)
 }
 
-func (p *Peer) logMessage(mtype MessageType, code ErrorCode, sends bool) {
+func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends bool) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -100,7 +83,7 @@ func (p *Peer) logMessage(mtype MessageType, code ErrorCode, sends bool) {
 	logs.Log(entry)
 }
 
-func (p *Peer) errMessage(mtype MessageType, code ErrorCode, message string, sends bool) {
+func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message string, sends bool) {
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
