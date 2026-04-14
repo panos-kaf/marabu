@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"marabu/internal/bootstrap"
+	"marabu/internal/core"
 	"marabu/internal/logs"
 	"marabu/internal/peer"
-	"marabu/internal/storage"
 	"marabu/internal/ui"
 	"os"
 	"path/filepath"
@@ -25,15 +25,12 @@ func main() {
 	defer peersFile.Close()
 
 	DB_PATH := filepath.Join(".", "db")
-	Store, err := storage.NewStore(DB_PATH)
-	if err != nil {
-		fmt.Printf("Error creating object manager: %v\n", err)
-		return
-	}
 
-	go peer.CleanupPendingBlocks(Store)
+	Manager := core.NewManager(DB_PATH)
 
-	bootstrap.StartNode(Store)
+	go Manager.CleanupPendingBlocks(peer.NotifyPeerUnfindable)
+
+	bootstrap.StartNode(Manager)
 	ui.Start()
 
 }
