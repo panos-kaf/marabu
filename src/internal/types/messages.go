@@ -1,0 +1,30 @@
+package types
+
+const (
+	MSG_NONE        MessageType = ""
+	MSG_HELLO       MessageType = "hello"
+	MSG_ERROR       MessageType = "error"
+	MSG_GETPEERS    MessageType = "getpeers"
+	MSG_PEERS       MessageType = "peers"
+	MSG_GETOBJECT   MessageType = "getobject"
+	MSG_IHAVEOBJECT MessageType = "ihaveobject"
+	MSG_OBJECT      MessageType = "object"
+	MSG_GETMEMPOOL  MessageType = "getmempool"
+	MSG_MEMPOOL     MessageType = "mempool"
+	MSG_GETCHAINTIP MessageType = "getchaintip"
+	MSG_CHAINTIP    MessageType = "chaintip"
+
+	E_NONE                    ErrorCode = ""
+	E_INTERNAL_ERROR          ErrorCode = "INTERNAL_ERROR"
+	E_INVALID_FORMAT          ErrorCode = "INVALID_FORMAT"
+	E_UNKNOWN_OBJECT          ErrorCode = "UNKNOWN_OBJECT"
+	E_UNFINDABLE_OBJECT       ErrorCode = "UNFINDABLE_OBJECT"
+	E_INVALID_HANDSHAKE       ErrorCode = "INVALID_HANDSHAKE"
+	E_INVALID_TX_OUTPOINT     ErrorCode = "INVALID_TX_OUTPOINT"
+	E_INVALID_TX_SIGNATURE    ErrorCode = "INVALID_TX_SIGNATURE"
+	E_INVALID_TX_CONSERVATION ErrorCode = "INVALID_TX_CONSERVATION"
+	E_INVALID_BLOCK_COINBASE  ErrorCode = "INVALID_BLOCK_COINBASE"
+	E_INVALID_BLOCK_TIMESTAMP ErrorCode = "INVALID_BLOCK_TIMESTAMP"
+	E_INVALID_BLOCK_POW       ErrorCode = "INVALID_BLOCK_POW"
+	E_INVALID_GENESIS         ErrorCode = "INVALID_GENESIS"
+)
