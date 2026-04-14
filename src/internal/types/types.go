@@ -61,16 +61,3 @@ func BlockReward() Picabu {
 func BlockRewardBigInt() *big.Int {
 	return new(big.Int).SetUint64(BLOCK_REWARD_UINT64)
 }
-
-type UTXOKey struct {
-	Txid  HashID
-	Index int
-}
-
-type UTXOSet struct {
-	BlockID HashID
-	// Block   *Block
-	// only store unspent outputs from txs
-	UTXOs  map[UTXOKey]TxOutput
-	Height uint64
-}
