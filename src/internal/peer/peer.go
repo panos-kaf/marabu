@@ -6,7 +6,8 @@ import (
 	"marabu/internal/protocol"
 	"marabu/internal/storage"
 	"marabu/internal/types"
-	"marabu/internal/validation"
+
+	//"marabu/internal/validation"
 
 	"net"
 	"strconv"
@@ -30,7 +31,7 @@ type Peer struct {
 	done              chan struct{}
 	role              string
 	Store             *storage.Store
-	Validator         *validation.Validator
+	//Validator         *validation.Validator
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -42,13 +43,13 @@ func NewPeer(conn net.Conn,
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
-		conn:      conn,
-		addr:      addr,
-		buffer:    make([]byte, 0),
-		role:      role,
-		Store:     Store,
-		Validator: validation.NewValidator(Store),
-		done:      make(chan struct{}),
+		conn:   conn,
+		addr:   addr,
+		buffer: make([]byte, 0),
+		role:   role,
+		Store:  Store,
+		//Validator: validation.NewValidator(Store),
+		done: make(chan struct{}),
 	}
 
 	connectedPeersMutex.Lock()
