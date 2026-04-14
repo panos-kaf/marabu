@@ -165,6 +165,10 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 	}
 
 	isValid, err := crypto.VerifyPoW(blockid)
+
+	// REMOVE THIS AFTER TESTING
+	// isValid = true // TEMPORARY: Disable PoW verification for testing
+
 	if err != nil {
 		return types.E_INTERNAL_ERROR, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Failed to verify PoW for block %s: %v", blockid, err)
 	}
