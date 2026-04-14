@@ -3,11 +3,9 @@ package peer
 import (
 	"bufio"
 	"fmt"
+	"marabu/internal/core"
 	"marabu/internal/protocol"
-	"marabu/internal/storage"
 	"marabu/internal/types"
-
-	//"marabu/internal/validation"
 
 	"net"
 	"strconv"
@@ -30,8 +28,7 @@ type Peer struct {
 	handshakeComplete bool
 	done              chan struct{}
 	role              string
-	Store             *storage.Store
-	//Validator         *validation.Validator
+	Manager           *core.Manager
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -39,17 +36,16 @@ type Peer struct {
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
 	role string,
-	Store *storage.Store) *Peer {
+	Manager *core.Manager) *Peer {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
-		conn:   conn,
-		addr:   addr,
-		buffer: make([]byte, 0),
-		role:   role,
-		Store:  Store,
-		//Validator: validation.NewValidator(Store),
-		done: make(chan struct{}),
+		conn:    conn,
+		addr:    addr,
+		buffer:  make([]byte, 0),
+		role:    role,
+		Manager: Manager,
+		done:    make(chan struct{}),
 	}
 
 	connectedPeersMutex.Lock()
@@ -79,23 +75,16 @@ func (p *Peer) Routine(interval time.Duration, fn func()) {
 	}
 }
 
-func CleanupPendingBlocks(om *storage.Store) {
-	ticker := time.NewTicker(2 * time.Second)
+// NotifyPeerUnfindable is the callback we will give to the Manager.
+// It looks up the peer and sends the specific network error.
+func NotifyPeerUnfindable(peerAddr string, txid types.HashID) {
+	connectedPeersMutex.Lock()
+	expiredPeer, exists := connectedPeers[peerAddr]
+	connectedPeersMutex.Unlock()
 
-	for range ticker.C {
-		expiredBlocks := om.CheckPendingBlocks()
-
-		for _, expired := range expiredBlocks {
-
-			connectedPeersMutex.Lock()
-			expiredPeer, exists := connectedPeers[expired.Peer]
-			connectedPeersMutex.Unlock()
-
-			if exists {
-				expiredPeer.SendError(types.E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
-				expiredPeer.log(types.MSG_ERROR, types.E_UNFINDABLE_OBJECT, fmt.Sprintf("Pending block with txid %s is unfindable. Notifying peer %s", expired.Txid, expired.Peer))
-			}
-		}
+	if exists {
+		expiredPeer.SendError(types.E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
+		expiredPeer.log(types.MSG_ERROR, types.E_UNFINDABLE_OBJECT, fmt.Sprintf("Pending block with txid %s is unfindable. Notifying peer %s", txid, peerAddr))
 	}
 }
 
@@ -206,7 +195,7 @@ func (p *Peer) handleMessage(raw string) {
 	}
 }
 
-func StartServer(port int, Store *storage.Store) error {
+func StartServer(port int, Manager *core.Manager) error {
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
@@ -223,7 +212,7 @@ func StartServer(port int, Store *storage.Store) error {
 
 		addr := conn.RemoteAddr().String()
 
-		p := NewPeer(conn, "server", Store)
+		p := NewPeer(conn, "server", Manager)
 
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
@@ -231,7 +220,7 @@ func StartServer(port int, Store *storage.Store) error {
 	}
 }
 
-func StartClient(host string, port int, Store *storage.Store) error {
+func StartClient(host string, port int, Manager *core.Manager) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.Dial("tcp", addr)
@@ -239,7 +228,7 @@ func StartClient(host string, port int, Store *storage.Store) error {
 		return err
 	}
 
-	p := NewPeer(conn, "client", Store)
+	p := NewPeer(conn, "client", Manager)
 
 	p.logInfo(fmt.Sprintf("Connected to server at %s:%d", host, port))
 
