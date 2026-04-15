@@ -88,6 +88,6 @@ func MakeGetChainTip() (string, error) {
 func MakeChainTip(BlockID types.HashID) (string, error) {
 	return serialization.CanonicalizeMessage(&ChainTip{
 		Type:    types.MSG_CHAINTIP,
-		Block: BlockID,
+		BlockID: BlockID,
 	})
 }

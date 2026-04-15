@@ -62,7 +62,7 @@ type (
 
 	ChainTip struct {
 		Type  types.MessageType `json:"type"`
-		Block types.HashID      `json:"block"`
+		BlockID types.HashID      `json:"blockid"`
 	}
 )
 

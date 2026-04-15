@@ -139,18 +139,18 @@ func (p *Peer) handleGetChainTip() {
 
 func (p *Peer) handleChainTip(msg *protocol.ChainTip) {
 
-	p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" sent chain tip: "+string(msg.Block))
+	p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" sent chain tip: "+string(msg.BlockID))
 
-	exists, e := p.Manager.ExistsObject(msg.Block)
+	exists, e := p.Manager.ExistsObject(msg.BlockID)
 	if e != nil {
 		p.err(msg.Type, types.E_NONE, "Error checking if chain tip exists: "+e.Error())
 		return
 	}
 	if exists {
-		p.log(msg.Type, types.E_NONE, "We already have chain tip "+string(msg.Block))
+		p.log(msg.Type, types.E_NONE, "We already have chain tip "+string(msg.BlockID))
 	} else {
-		p.log(msg.Type, types.E_NONE, "We do not have chain tip "+string(msg.Block)+", requesting it from peer "+p.addr)
-		err := p.SendGetObject(msg.Block)
+		p.log(msg.Type, types.E_NONE, "We do not have chain tip "+string(msg.BlockID)+", requesting it from peer "+p.addr)
+		err := p.SendGetObject(msg.BlockID)
 		if err != nil {
 			p.err(msg.Type, types.E_NONE, "Error sending getobject for chain tip: "+err.Error())
 		}
