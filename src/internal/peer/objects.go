@@ -44,10 +44,17 @@ func (p *Peer) resolvePendingBlocks(msgType types.MessageType, resolvedObjID typ
 		result := p.Manager.ValidateObject(blk, p.addr)
 
 		if result.ErrorCode == types.E_NONE && result.Error == nil {
+
 			p.acceptObject(msgType, blk, result)
 			p.log(msgType, types.E_NONE, fmt.Sprintf("Successfully validated pending block %s", result.ObjID))
+
 		} else if result.ErrorCode != types.E_UNKNOWN_OBJECT {
+			if result.MissingID != types.DUMMY_HASH {
+				BroadcastGetObject(result.MissingID)
+			}
+		} else {
 			p.err(msgType, types.E_NONE, fmt.Sprintf("Pending block %s remains invalid: %v", result.ObjID, result.Error))
+			p.SendError(result.ErrorCode, fmt.Sprintf("Pending block %s is still invalid: %v", result.ObjID, result.Error))
 		}
 	}
 }
