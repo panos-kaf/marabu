@@ -111,6 +111,7 @@ func (p *Peer) SendChainTip(chainTip types.HashID) error {
 func (p *Peer) Greet() {
 	p.SendHello()
 	p.SendGetPeers()
+	p.SendGetChainTip()
 }
 
 // -- Top level broadcast functions for each message type --
