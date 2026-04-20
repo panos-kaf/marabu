@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"marabu/internal/protocol"
 	"marabu/internal/types"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -35,16 +37,38 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 		globalError(fmt.Sprintf("Failed to create %s message: %v", t, mkErr))
 		return
 	}
-	connectedPeersMutex.Lock()
-	defer connectedPeersMutex.Unlock()
-	var hasErrors bool
-	for _, peer := range connectedPeers {
-		if err := peer.SendMessage(t, code, msg, nil); err != nil {
-			peer.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, peer.addr, err))
-			hasErrors = true
-		}
+
+	peersToBroadcast := ConnManager.GetAll()
+
+	if len(peersToBroadcast) == 0 {
+		return
 	}
-	if hasErrors {
+
+	// Use a WaitGroup to wait for all network calls to finish,
+	// and an atomic boolean to safely track if any failed.
+	var wg sync.WaitGroup
+	var hasErrors atomic.Bool
+
+	// Fire all messages concurrently
+	for _, peer := range peersToBroadcast {
+		wg.Add(1)
+
+		// launch a goroutine for every peer
+		go func(p *Peer) {
+			defer wg.Done()
+
+			if err := p.SendMessage(t, code, msg, nil); err != nil {
+				p.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, p.addr, err))
+				hasErrors.Store(true) // Safely mark that an error occurred
+			}
+		}(peer) // Pass 'peer' into the closure to avoid variable capture bugs
+	}
+
+	// Wait for all goroutines to finish sending
+	wg.Wait()
+
+	// Log the final result
+	if hasErrors.Load() {
 		globalError(fmt.Sprintf("Failed to broadcast %s message to some peers", t))
 	} else {
 		globalLog(fmt.Sprintf("Successfully broadcasted %s message to all peers", t))
