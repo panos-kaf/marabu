@@ -21,7 +21,7 @@ func StartNode(Manager *core.Manager) {
 		go func(p types.Peer) {
 			host, portStr, _ := net.SplitHostPort(string(p))
 			port, _ := strconv.Atoi(portStr)
-			err := peer.StartClient(host, port, Manager)
+			err := peer.StartClient(host, port, true, Manager)
 			if err != nil {
 				fmt.Printf("Error connecting to peer %s: %v\n", p, err)
 			}
