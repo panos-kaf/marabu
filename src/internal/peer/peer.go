@@ -10,14 +10,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-)
-
-var (
-	connectedPeers      = make(map[string]*Peer)
-	connectedPeersMutex sync.Mutex
-	connectedPeersCnt   = 0
 )
 
 type Peer struct {
@@ -28,6 +21,7 @@ type Peer struct {
 	handshakeComplete bool
 	done              chan struct{}
 	role              string
+	isPersistent      bool
 	Manager           *core.Manager
 }
 
@@ -36,23 +30,21 @@ type Peer struct {
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
 	role string,
+	isPersistent bool,
 	Manager *core.Manager) *Peer {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
-		conn:    conn,
-		addr:    addr,
-		buffer:  make([]byte, 0),
-		role:    role,
-		Manager: Manager,
-		done:    make(chan struct{}),
+		conn:         conn,
+		addr:         addr,
+		buffer:       make([]byte, 0),
+		role:         role,
+		Manager:      Manager,
+		isPersistent: isPersistent,
+		done:         make(chan struct{}),
 	}
 
-	connectedPeersMutex.Lock()
-	connectedPeersCnt++
-	connectedPeers[addr] = p
-	p.ID = connectedPeersCnt
-	connectedPeersMutex.Unlock()
+	ConnManager.Add(p)
 
 	go p.initializeSocket()
 
@@ -78,9 +70,8 @@ func (p *Peer) Routine(interval time.Duration, fn func()) {
 // NotifyPeerUnfindable is the callback we will give to the Manager.
 // It looks up the peer and sends the specific network error.
 func NotifyPeerUnfindable(peerAddr string, txid types.HashID) {
-	connectedPeersMutex.Lock()
-	expiredPeer, exists := connectedPeers[peerAddr]
-	connectedPeersMutex.Unlock()
+
+	expiredPeer, exists := ConnManager.Exists(peerAddr)
 
 	if exists {
 		expiredPeer.SendError(types.E_UNFINDABLE_OBJECT, "Failed to retrieve object from the network in time.")
@@ -90,7 +81,7 @@ func NotifyPeerUnfindable(peerAddr string, txid types.HashID) {
 
 // initializeSocket starts a goroutine to read messages from the peer's connection.
 // It continuously reads lines from the connection, and for each line, it calls handleMessage.
-// On error it disconnects and removes the peer from the connectedPeers map.
+// On error it disconnects and removes the peer from the connManager peers map.
 func (p *Peer) initializeSocket() {
 	reader := bufio.NewReader(p.conn)
 	for {
@@ -112,9 +103,7 @@ func (p *Peer) disconnect() {
 		close(p.done)
 	}
 
-	connectedPeersMutex.Lock()
-	delete(connectedPeers, p.addr)
-	connectedPeersMutex.Unlock()
+	ConnManager.Remove(p)
 
 	p.conn.Close()
 
@@ -212,7 +201,7 @@ func StartServer(port int, Manager *core.Manager) error {
 
 		addr := conn.RemoteAddr().String()
 
-		p := NewPeer(conn, "server", Manager)
+		p := NewPeer(conn, "server", false, Manager)
 
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
@@ -220,7 +209,7 @@ func StartServer(port int, Manager *core.Manager) error {
 	}
 }
 
-func StartClient(host string, port int, Manager *core.Manager) error {
+func StartClient(host string, port int, isPersistent bool, Manager *core.Manager) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.Dial("tcp", addr)
@@ -228,7 +217,7 @@ func StartClient(host string, port int, Manager *core.Manager) error {
 		return err
 	}
 
-	p := NewPeer(conn, "client", Manager)
+	p := NewPeer(conn, "client", isPersistent, Manager)
 
 	p.logInfo(fmt.Sprintf("Connected to server at %s:%d", host, port))
 
