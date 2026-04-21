@@ -59,7 +59,7 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 
 			if err := p.SendMessage(t, code, msg, nil); err != nil {
 				p.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, p.addr, err))
-				hasErrors.Store(true) // Safely mark that an error occurred
+				hasErrors.Store(true)
 			}
 		}(peer) // Pass 'peer' into the closure to avoid variable capture bugs
 	}

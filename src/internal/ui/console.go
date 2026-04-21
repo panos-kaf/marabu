@@ -24,7 +24,7 @@ func Start() {
 			fmt.Println("  exit - Exit the CLI")
 		case "peers":
 			fmt.Println("dummy command")
-			// logs.ClientLog("", fmt.Sprintf("Connected peers: %d", len(peer.GetConnectedPeers())), -1)
+			// logs.ClientLog("", fmt.Sprintf("Connected peers: %d", len(ConnManager.GetCounts())), -1)
 		case "objects":
 			fmt.Println("dummy command")
 			// logs.ClientLog("", fmt.Sprintf("Stored objects: %d", object.GetObjectCount()), -1)

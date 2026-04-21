@@ -273,7 +273,7 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 		return types.E_INVALID_BLOCK_COINBASE, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Coinbase transaction value %d exceeds allowed reward+fees of %d", coinbaseVal, totalOutput)
 	}
 
-	// Build the proposed UTXO set, but DO NOT save it!
+	// Build the proposed UTXO set, but DO NOT save it
 	newSet := UTXOSet{UTXOs: utxos, BlockID: types.HashID(blockid), Height: height}
 
 	var curHeight uint64
