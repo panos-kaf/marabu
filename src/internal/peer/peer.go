@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+const (
+	inbound  = false
+	outbound = true
+)
+
 type Peer struct {
 	conn              net.Conn
 	addr              string
@@ -20,7 +25,7 @@ type Peer struct {
 	buffer            []byte
 	handshakeComplete bool
 	done              chan struct{}
-	role              string
+	origin            types.Origin
 	isPersistent      bool
 	Manager           *core.Manager
 }
@@ -29,7 +34,7 @@ type Peer struct {
 // It initializes the peer's state and starts a goroutine
 // to handle incoming messages from the connection.
 func NewPeer(conn net.Conn,
-	role string,
+	origin types.Origin,
 	isPersistent bool,
 	Manager *core.Manager) *Peer {
 
@@ -38,7 +43,7 @@ func NewPeer(conn net.Conn,
 		conn:         conn,
 		addr:         addr,
 		buffer:       make([]byte, 0),
-		role:         role,
+		origin:       origin,
 		Manager:      Manager,
 		isPersistent: isPersistent,
 		done:         make(chan struct{}),
@@ -107,14 +112,8 @@ func (p *Peer) disconnect() {
 
 	p.conn.Close()
 
-	switch p.role {
-	case "client":
-		p.logInfo("Disconnected from server at " + p.addr)
-	case "server":
-		p.logInfo("Client at " + p.addr + " disconnected")
-	default:
-		p.logInfo("Peer at " + p.addr + " disconnected")
-	}
+	p.logInfo("Peer at " + p.addr + " disconnected")
+
 }
 
 // handleMessage processes incoming messages,
@@ -201,7 +200,7 @@ func StartServer(port int, Manager *core.Manager) error {
 
 		addr := conn.RemoteAddr().String()
 
-		p := NewPeer(conn, "server", false, Manager)
+		p := NewPeer(conn, types.Inbound, false, Manager)
 
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
@@ -217,9 +216,9 @@ func StartClient(host string, port int, isPersistent bool, Manager *core.Manager
 		return err
 	}
 
-	p := NewPeer(conn, "client", isPersistent, Manager)
+	p := NewPeer(conn, types.Outbound, isPersistent, Manager)
 
-	p.logInfo(fmt.Sprintf("Connected to server at %s:%d", host, port))
+	p.logInfo(fmt.Sprintf("Connected to peer at %s:%d", host, port))
 
 	p.Greet()
 

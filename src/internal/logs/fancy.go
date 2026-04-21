@@ -25,11 +25,11 @@ type LogEntry struct {
 	MessageType types.MessageType
 	ErrorCode   types.ErrorCode
 	ID          int
-	Direction   string
+	Direction   types.Direction
 	Addr        string
 	IsError     bool
 	Message     string
-	Role        string
+	Origin      types.Origin
 }
 
 func MessageTypeColor(mtype types.MessageType) string {
@@ -51,11 +51,11 @@ func MessageTypeColor(mtype types.MessageType) string {
 	}
 }
 
-func RoleColor(role string) string {
-	switch role {
-	case "client":
+func OriginColor(origin types.Origin) string {
+	switch origin {
+	case types.Outbound:
 		return BLUE
-	case "server":
+	case types.Inbound:
 		return MAGENTA
 	default:
 		return RESET
@@ -64,7 +64,7 @@ func RoleColor(role string) string {
 
 func Log(m LogEntry) {
 
-	rolecolor := RoleColor(m.Role)
+	origincolor := OriginColor(m.Origin)
 	msgcolor := MessageTypeColor(m.MessageType)
 
 	id := ""
@@ -74,7 +74,7 @@ func Log(m LogEntry) {
 		id = fmt.Sprintf("[%d]", m.ID)
 	}
 
-	msg := fmt.Sprintf("%s%s%s", BOLD, rolecolor, id)
+	msg := fmt.Sprintf("%s%s%s", BOLD, origincolor, id)
 
 	label := string(m.MessageType)
 	if m.MessageType == types.MSG_ERROR && m.ErrorCode != types.E_NONE {
@@ -113,7 +113,7 @@ func GlobalLog(msg string) {
 		Addr:        "",
 		IsError:     false,
 		Message:     msg,
-		Role:        "",
+		Origin:        "",
 	}
 	Log(entry)
 }
@@ -126,7 +126,7 @@ func GlobalError(msg string) {
 		Addr:        "",
 		IsError:     true,
 		Message:     msg,
-		Role:        "",
+		Origin:        "",
 	}
 	Log(entry)
 }

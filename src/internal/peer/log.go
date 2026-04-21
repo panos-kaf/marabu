@@ -21,7 +21,7 @@ func (p *Peer) logInfo(message string) {
 		Addr:        p.addr,
 		IsError:     false,
 		Message:     message,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
 	logs.Log(entry)
 }
@@ -34,7 +34,7 @@ func (p *Peer) errInfo(message string) {
 		Addr:        p.addr,
 		IsError:     true,
 		Message:     message,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
 	logs.Log(entry)
 }
@@ -47,7 +47,7 @@ func (p *Peer) log(mtype types.MessageType, code types.ErrorCode, message string
 		Addr:        p.addr,
 		IsError:     false,
 		Message:     message,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
 	logs.Log(entry)
 }
@@ -60,7 +60,7 @@ func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string
 		Addr:        p.addr,
 		IsError:     true,
 		Message:     message,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
 	logs.Log(entry)
 }
@@ -72,9 +72,9 @@ func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends b
 		ID:          p.ID,
 		Addr:        p.addr,
 		IsError:     false,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
-	entry.Role = p.role
+	entry.Origin = p.origin
 	if sends {
 		entry.Direction = "sent"
 	} else {
@@ -91,7 +91,7 @@ func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message
 		Addr:        p.addr,
 		IsError:     true,
 		Message:     message,
-		Role:        p.role,
+		Origin:      p.origin,
 	}
 	if sends {
 		entry.Direction = "sent"
