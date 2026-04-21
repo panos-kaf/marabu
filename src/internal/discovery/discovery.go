@@ -109,14 +109,19 @@ func AppendPeers(peers types.Peers, source string) {
 }
 
 // Select random peers per source
-func SelectRandomPeersPerSource(count int) []string {
+func SelectRandomPeersPerSource(count int, ignoreIPs map[string]bool) []string {
 	KnownPeersMutex.Lock()
 	defer KnownPeersMutex.Unlock()
 
 	peersBySource := make(map[string][]string)
 	for peer, source := range KnownPeers {
 		if peer != types.PEER_INVALID {
-			peersBySource[source] = append(peersBySource[source], string(peer))
+			peerStr := string(peer)
+
+			if ignoreIPs[peerStr] {
+				continue
+			}
+			peersBySource[source] = append(peersBySource[source], peerStr)
 		}
 	}
 	selected := []string{}
