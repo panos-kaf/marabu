@@ -2,6 +2,8 @@
 
 package ui
 
-func Start() {
+import "marabu/internal/core"
+
+func Start(manager *core.Manager) {
 	select {}
 }
