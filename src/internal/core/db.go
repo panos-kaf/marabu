@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -146,6 +147,27 @@ func (d *database) putObject(object types.Object) (types.HashID, error) {
 	}
 
 	return types.HashID(id), nil
+}
+
+func (d *database) getAllObjectIDs() ([]types.HashID, error) {
+	var ids []types.HashID
+
+	// Create an iterator over the entire database
+	iter := d.db.NewIterator(nil, nil)
+	defer iter.Release()
+
+	for iter.Next() {
+		keyStr := string(iter.Key())
+
+		// Filter out our internal state tracking keys
+		if keyStr == "chaintip" || strings.HasPrefix(keyStr, "utxo-") || strings.HasPrefix(keyStr, "fee-") {
+			continue
+		}
+
+		ids = append(ids, types.HashID(keyStr))
+	}
+
+	return ids, iter.Error()
 }
 
 func (d *database) findObject(id types.HashID) (types.Object, error) {

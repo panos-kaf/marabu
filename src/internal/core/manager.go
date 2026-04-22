@@ -74,6 +74,10 @@ func (m *Manager) GetObject(id types.HashID) (types.Object, error) {
 	return obj, err
 }
 
+func (m *Manager) GetAllObjectIDs() ([]types.HashID, error) {
+	return m.db.getAllObjectIDs()
+}
+
 func (m *Manager) GetUTXO(id types.HashID) (*UTXOSet, error) {
 	UTXOSet, err := m.db.getUTXO(id)
 
