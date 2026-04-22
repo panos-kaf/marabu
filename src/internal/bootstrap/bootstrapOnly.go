@@ -1,4 +1,4 @@
-//go:build standard
+//go:build bootstrap_only
 
 package bootstrap
 
@@ -17,7 +17,7 @@ import (
 // start server and initiate client connections to bootstrap peers
 func StartNode(Manager *core.Manager) {
 
-	logs.GlobalLog("Starting marabu, connecting to bootstrap nodes and churning")
+	logs.GlobalLog("Starting marabu, only connecting to bootstrap nodes")
 	go peer.StartServer(18018, Manager)
 
 	for _, p := range discovery.BOOTSTRAP_PEERS {
@@ -30,6 +30,4 @@ func StartNode(Manager *core.Manager) {
 			}
 		}(p)
 	}
-
-	go peer.StartTopologyManager(Manager)
 }
