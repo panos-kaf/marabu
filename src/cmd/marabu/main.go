@@ -31,6 +31,6 @@ func main() {
 	go Manager.CleanupPendingBlocks(peer.NotifyPeerUnfindable)
 
 	bootstrap.StartNode(Manager)
-	ui.Start()
+	ui.Start(Manager)
 
 }
