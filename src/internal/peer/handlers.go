@@ -10,12 +10,19 @@ import (
 )
 
 func (p *Peer) handleHello(msg *protocol.Hello) {
+
+	agent := "unknown"
+
 	if msg.Agent != nil {
+		agent = string(*msg.Agent)
 		p.log(msg.Type, types.E_NONE, string(*msg.Agent)+" ("+p.addr+") says hello, version: "+string(msg.Version))
 	} else {
 		p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" says hello, version: "+string(msg.Version))
 	}
 	p.handshakeComplete = true
+
+	p.agent = agent
+	discovery.UpdateAgent(p.addr, agent)
 }
 
 func (p *Peer) handleError(msg *protocol.Error) {

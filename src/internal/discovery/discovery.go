@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+type PeerRecord struct {
+	Source string
+	Agent  string
+}
+
 var (
 	BOOTSTRAP_PEERS = types.Peers{
 		"95.179.158.137:18018",
@@ -21,7 +26,7 @@ var (
 		"45.32.235.245:18018",
 	}
 	PEERS_FILE      = filepath.Join(".", "db", "peers.csv")
-	KnownPeers      = make(map[types.Peer]string)
+	KnownPeers      = make(map[types.Peer]PeerRecord)
 	KnownPeersMutex sync.Mutex
 )
 
@@ -36,7 +41,7 @@ func init() {
 func loadPeers() {
 	KnownPeersMutex.Lock()
 	for _, peer := range BOOTSTRAP_PEERS {
-		KnownPeers[peer] = "bootstrap"
+		KnownPeers[peer] = PeerRecord{Source: "bootstrap", Agent: "unknown"}
 	}
 	KnownPeersMutex.Unlock()
 	file, err := os.Open(PEERS_FILE)
@@ -53,7 +58,14 @@ func loadPeers() {
 		if len(rec) < 2 || rec[0] == "Address" {
 			continue
 		}
-		KnownPeers[types.Peer(rec[0])] = rec[1]
+
+		// Safely handle the 3rd column (for backwards compatibility with your old CSV!)
+		agent := "unknown"
+		if len(rec) > 2 {
+			agent = rec[2]
+		}
+
+		KnownPeers[types.Peer(rec[0])] = PeerRecord{Source: rec[1], Agent: agent}
 	}
 }
 
@@ -67,10 +79,10 @@ func savePeers() {
 	defer file.Close()
 	w := csv.NewWriter(file)
 	defer w.Flush()
-	w.Write([]string{"Address", "Source"})
-	for peer, source := range KnownPeers {
+	w.Write([]string{"Address", "Source", "Agent"})
+	for peer, record := range KnownPeers {
 		if peer != types.PEER_INVALID {
-			w.Write([]string{string(peer), string(source)})
+			w.Write([]string{string(peer), record.Source, record.Agent})
 		}
 	}
 }
@@ -95,8 +107,8 @@ func AppendPeers(peers types.Peers, source string) {
 		if peer != types.PEER_INVALID {
 			if _, exists := KnownPeers[peer]; !exists {
 				newPeers++
-				KnownPeers[peer] = source
-				logs.GlobalLog(fmt.Sprintf("Added new peer: %s from source %s", peer, source))
+				KnownPeers[peer] = PeerRecord{Source: source, Agent: "unknown"}
+				logs.GlobalLog(fmt.Sprintf("Discovered new peer: %s from %s", peer, source))
 			}
 		}
 	}
@@ -104,24 +116,80 @@ func AppendPeers(peers types.Peers, source string) {
 		savePeers()
 		logs.GlobalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
 	} else {
-		logs.GlobalLog("No new peers to add.")
+		logs.GlobalLog("No new peers to store.")
 	}
 }
 
-// Select random peers per source
+func RemovePeer(peerAddr string) {
+	KnownPeersMutex.Lock()
+	defer KnownPeersMutex.Unlock()
+
+	p := types.Peer(peerAddr)
+	delete(KnownPeers, p)
+}
+
+func UpdateAgent(peerAddr string, agent string) {
+	KnownPeersMutex.Lock()
+	defer KnownPeersMutex.Unlock()
+
+	p := types.Peer(peerAddr)
+	if record, exists := KnownPeers[p]; exists {
+		if record.Agent != agent {
+			record.Agent = agent
+			KnownPeers[p] = record
+			savePeers()
+		}
+	} else {
+		// Just in case they dial us before we discovered them via gossiping
+		KnownPeers[p] = PeerRecord{Source: "direct", Agent: agent}
+		savePeers()
+	}
+}
+
+func SelectRandomPeers(count int, ignoreIPs map[string]bool) []string {
+	KnownPeersMutex.Lock()
+	defer KnownPeersMutex.Unlock()
+
+	var validPeers []string
+	for peer := range KnownPeers {
+		if peer != types.PEER_INVALID {
+			peerStr := string(peer)
+
+			if !ignoreIPs[peerStr] {
+				validPeers = append(validPeers, peerStr)
+			}
+		}
+	}
+
+	if len(validPeers) <= count {
+		return validPeers
+	}
+
+	selected := make([]string, 0, count)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	perm := rng.Perm(len(validPeers))
+	for i := range count {
+		selected = append(selected, validPeers[perm[i]])
+	}
+
+	return selected
+}
+
+// Select count random peers per source
 func SelectRandomPeersPerSource(count int, ignoreIPs map[string]bool) []string {
 	KnownPeersMutex.Lock()
 	defer KnownPeersMutex.Unlock()
 
 	peersBySource := make(map[string][]string)
-	for peer, source := range KnownPeers {
+	for peer, record := range KnownPeers {
 		if peer != types.PEER_INVALID {
 			peerStr := string(peer)
 
 			if ignoreIPs[peerStr] {
 				continue
 			}
-			peersBySource[source] = append(peersBySource[source], peerStr)
+			peersBySource[record.Source] = append(peersBySource[record.Source], peerStr)
 		}
 	}
 	selected := []string{}
