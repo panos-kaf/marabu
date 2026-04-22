@@ -18,6 +18,12 @@ no-bootstrap-headless:
 no-bootstrap-cli:
 	make -C $(SRC) no-bootstrap-cli
 
+bootstrap-only-headless:
+	make -C $(SRC) bootstrap-only-headless
+
+bootstrap-only-cli:
+	make -C $(SRC) bootstrap-only-cli
+
 tests:
 	make -C $(SRC) tests
 

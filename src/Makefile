@@ -3,7 +3,7 @@ MARABU=./cmd/marabu
 
 all: build tests
 
-build: standard-cli standard-headless no-bootstrap-cli no-bootstrap-headless 
+build: standard-cli standard-headless bootstrap-only-cli bootstrap-only-headless no-bootstrap-cli no-bootstrap-headless 
 
 standard-cli:
 	go build -tags "standard cli" -o $(BIN)/marabu-standard-cli $(MARABU)
@@ -16,6 +16,12 @@ no-bootstrap-cli:
 
 no-bootstrap-headless:
 	go build -tags "no_bootstrap headless" -o $(BIN)/marabu-no-bootstrap-headless $(MARABU)
+
+bootstrap-only-cli:
+	go build -tags "bootstrap_only cli" -o $(BIN)/marabu-bootstrap-only-cli $(MARABU)
+
+bootstrap-only-headless:
+	go build -tags "bootstrap_only headless" -o $(BIN)/marabu-bootstrap-only-headless $(MARABU)
 
 tests: test-obj test-obj-simple test-pset2 test-utxo
 

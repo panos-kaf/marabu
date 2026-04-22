@@ -11,6 +11,7 @@ ui_choice=${ui_choice:-1}
 echo "Select bootstrap mode:"
 echo "1) No-bootstrap"
 echo "2) Standard"
+echo "3) Bootstrap Only"
 read -rp "Enter choice [1-2] (default: 1): " boot_choice
 boot_choice=${boot_choice:-1}
 
@@ -22,20 +23,26 @@ fi
 
 if [ "$boot_choice" = "1" ]; then
     boot="no-bootstrap"
-else
+elif [ "$boot_choice" = "2" ]; then
     boot="standard"
+else 
+    boot="bootstrap-only"
 fi
 
 # Determine executable
 if [ "$ui" = "cli" ]; then
   if [ "$boot" = "standard" ]; then
     marabu="./bin/marabu-standard-cli"
+  elif [ "$boot" = "bootstrap-only" ]; then
+    marabu="./bin/marabu-bootstrap-only-cli"
   else
     marabu="./bin/marabu-no-bootstrap-cli"
   fi
 else
   if [ "$boot" = "standard" ]; then
     marabu="./bin/marabu-standard-headless"
+  elif [ "$boot" = "bootstrap-only" ]; then
+    marabu="./bin/marabu-bootstrap-only-cli"
   else
     marabu="./bin/marabu-no-bootstrap-headless"
   fi
