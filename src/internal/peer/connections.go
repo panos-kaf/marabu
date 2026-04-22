@@ -1,8 +1,14 @@
 package peer
 
 import (
+	"errors"
 	"marabu/internal/types"
 	"sync"
+)
+
+var (
+	ErrOutboundFull      = errors.New("outbound connections capped")
+	ErrOutboundDuplicate = errors.New("outbound connection already exists")
 )
 
 // ConnectionManager handles thread-safe tracking of all active TCP connections
@@ -27,10 +33,17 @@ func NewConnectionManager() *ConnectionManager {
 var ConnManager = NewConnectionManager()
 
 // Add safely registers a new peer and increments the counters
-func (cm *ConnectionManager) Add(p *Peer) {
+func (cm *ConnectionManager) Add(p *Peer) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
+	if p.origin == types.Outbound && !p.isPersistent && cm.outboundCount >= MaxOutbound {
+		return ErrOutboundFull
+	}
+
+	if _, exists := cm.peers[p.addr]; exists {
+		return ErrOutboundDuplicate
+	}
 	cm.peers[p.addr] = p
 
 	cm.peerCounter++
@@ -38,11 +51,16 @@ func (cm *ConnectionManager) Add(p *Peer) {
 
 	if p.isPersistent {
 		cm.persistentCount++
-	} else if p.origin == types.Inbound {
+	}
+
+	switch p.origin {
+	case types.Inbound:
 		cm.inboundCount++
-	} else if p.origin == types.Outbound {
+	case types.Outbound:
 		cm.outboundCount++
 	}
+
+	return nil
 }
 
 // Remove safely deletes a peer and decrements the counters
@@ -59,9 +77,12 @@ func (cm *ConnectionManager) Remove(p *Peer) {
 
 	if p.isPersistent {
 		cm.persistentCount--
-	} else if p.origin == types.Inbound {
+	}
+
+	switch p.origin {
+	case types.Inbound:
 		cm.inboundCount--
-	} else if p.origin == types.Outbound {
+	case types.Outbound:
 		cm.outboundCount--
 	}
 }
