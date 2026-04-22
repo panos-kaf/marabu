@@ -20,6 +20,7 @@ const (
 
 type Peer struct {
 	conn              net.Conn
+	agent             string
 	addr              string
 	ID                int
 	buffer            []byte
@@ -36,7 +37,7 @@ type Peer struct {
 func NewPeer(conn net.Conn,
 	origin types.Origin,
 	isPersistent bool,
-	Manager *core.Manager) *Peer {
+	Manager *core.Manager) (*Peer, error) {
 
 	addr := conn.RemoteAddr().String()
 	p := &Peer{
@@ -49,14 +50,24 @@ func NewPeer(conn net.Conn,
 		done:         make(chan struct{}),
 	}
 
-	ConnManager.Add(p)
+	err := ConnManager.Add(p)
+	if err != nil {
+		p.conn.Close()
+		return nil, err
+	}
 
 	go p.initializeSocket()
 
-	// Start a routine to check for unfindable objects every 2 seconds
-	// go p.Routine(2*time.Second, func() { p.NotifyUnfindableObject() })
+	return p, nil
+}
 
-	return p
+// Getters
+func (p *Peer) Addr() string         { return p.addr }
+func (p *Peer) Agent() string        { return p.agent }
+func (p *Peer) Origin() types.Origin { return p.origin }
+func (p *Peer) IsPersistent() bool   { return p.isPersistent }
+func (p *Peer) Disconnect() {
+	p.conn.Close()
 }
 
 func (p *Peer) Routine(interval time.Duration, fn func()) {
@@ -200,7 +211,11 @@ func StartServer(port int, Manager *core.Manager) error {
 
 		addr := conn.RemoteAddr().String()
 
-		p := NewPeer(conn, types.Inbound, false, Manager)
+		p, err := NewPeer(conn, types.Inbound, false, Manager)
+
+		if err != nil {
+			return fmt.Errorf("Error accepting new connection: %s", err.Error())
+		}
 
 		p.logInfo(fmt.Sprintf("Accepted connection from %s", addr))
 
@@ -211,12 +226,16 @@ func StartServer(port int, Manager *core.Manager) error {
 func StartClient(host string, port int, isPersistent bool, Manager *core.Manager) error {
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		return err
 	}
 
-	p := NewPeer(conn, types.Outbound, isPersistent, Manager)
+	p, err := NewPeer(conn, types.Outbound, isPersistent, Manager)
+
+	if err != nil {
+		return fmt.Errorf("Error starting client: %w", err)
+	}
 
 	p.logInfo(fmt.Sprintf("Connected to peer at %s:%d", host, port))
 
