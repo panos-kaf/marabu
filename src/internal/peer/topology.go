@@ -59,11 +59,12 @@ func replenishOutbound(Manager *core.Manager) {
 		return
 	}
 
-	candidates := discovery.SelectRandomPeers(64, ConnManager.GetActiveIPs())
+	candidates := discovery.SelectRecentPeers(50, ConnManager.GetActiveIPs())
 
 	// globalLog("Topology Manager: Replenishing outbound connections...")
-
 	globalLog(fmt.Sprintf("Topology Manager: Attempting to dial %d peers...", len(candidates)))
+
+	// globalLog(fmt.Sprintf("Topology Manager: Known Peers: %d", discovery.GetKnownPeersCount()))
 
 	var wg sync.WaitGroup
 	var found atomic.Int32
