@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"marabu/internal/logs"
 	"marabu/internal/types"
+	"sort"
+	"strconv"
 
 	"math/rand"
 	"os"
@@ -15,8 +17,9 @@ import (
 )
 
 type PeerRecord struct {
-	Source string
-	Agent  string
+	Source   string
+	Agent    string
+	LastSeen int64
 }
 
 var (
@@ -25,8 +28,11 @@ var (
 		"95.179.132.22:18018",
 		"45.32.235.245:18018",
 	}
-	PEERS_FILE      = filepath.Join(".", "db", "peers.csv")
-	KnownPeers      = make(map[types.Peer]PeerRecord)
+	PEERS_FILE = filepath.Join(".", "db", "peers.csv")
+
+	KnownPeers = make(map[types.Peer]PeerRecord)
+	DeadPeers  = make(map[types.Peer]time.Time)
+
 	KnownPeersMutex sync.Mutex
 )
 
@@ -35,6 +41,8 @@ func init() {
 	if _, err := os.Stat(PEERS_FILE); errors.Is(err, os.ErrNotExist) {
 		savePeers()
 	}
+
+	go DeadPeersTimer()
 }
 
 // Load peers from file and bootstrap list
@@ -65,7 +73,12 @@ func loadPeers() {
 			agent = rec[2]
 		}
 
-		KnownPeers[types.Peer(rec[0])] = PeerRecord{Source: rec[1], Agent: agent}
+		var lastSeen int64 = 0
+		if len(rec) > 3 {
+			lastSeen, _ = strconv.ParseInt(rec[3], 10, 64)
+		}
+
+		KnownPeers[types.Peer(rec[0])] = PeerRecord{Source: rec[1], Agent: agent, LastSeen: lastSeen}
 	}
 }
 
@@ -79,10 +92,15 @@ func savePeers() {
 	defer file.Close()
 	w := csv.NewWriter(file)
 	defer w.Flush()
-	w.Write([]string{"Address", "Source", "Agent"})
+	w.Write([]string{"Address", "Source", "Agent", "LastSeen"})
 	for peer, record := range KnownPeers {
 		if peer != types.PEER_INVALID {
-			w.Write([]string{string(peer), record.Source, record.Agent})
+			w.Write([]string{
+				string(peer),
+				record.Source,
+				record.Agent,
+				strconv.FormatInt(record.LastSeen, 10),
+			})
 		}
 	}
 }
@@ -98,6 +116,13 @@ func GetKnownPeers() types.Peers {
 	return keys
 }
 
+func GetKnownPeersCount() int {
+	KnownPeersMutex.Lock()
+	defer KnownPeersMutex.Unlock()
+
+	return len(KnownPeers)
+}
+
 // Add new peers
 func AppendPeers(peers types.Peers, source string) {
 	KnownPeersMutex.Lock()
@@ -105,6 +130,11 @@ func AppendPeers(peers types.Peers, source string) {
 	newPeers := 0
 	for _, peer := range peers {
 		if peer != types.PEER_INVALID {
+
+			if _, isDead := DeadPeers[peer]; isDead {
+				continue
+			}
+
 			if _, exists := KnownPeers[peer]; !exists {
 				newPeers++
 				KnownPeers[peer] = PeerRecord{Source: source, Agent: "unknown"}
@@ -116,7 +146,7 @@ func AppendPeers(peers types.Peers, source string) {
 		savePeers()
 		logs.GlobalLog(fmt.Sprintf("Saved %d peers to disk...", newPeers))
 	} else {
-		logs.GlobalLog("No new peers to store.")
+		// logs.GlobalLog("No new peers to store.")
 	}
 }
 
@@ -126,24 +156,50 @@ func RemovePeer(peerAddr string) {
 
 	p := types.Peer(peerAddr)
 	delete(KnownPeers, p)
+	DeadPeers[p] = time.Now()
 }
 
-func UpdateAgent(peerAddr string, agent string) {
+func DeadPeersTimer() {
+
+	ticker := time.NewTicker(15 * time.Minute)
+
+	for range ticker.C {
+		KnownPeersMutex.Lock()
+
+		now := time.Now()
+		cleared := 0
+
+		for peer, timeOfDeath := range DeadPeers {
+			if now.Sub(timeOfDeath) > 12*time.Hour {
+				delete(DeadPeers, peer)
+				cleared++
+			}
+		}
+
+		KnownPeersMutex.Unlock()
+
+		if cleared > 0 {
+			logs.GlobalLog(fmt.Sprintf("Discovery: Swept %d expired tombstones from the graveyard.", cleared))
+		}
+	}
+}
+
+func UpdatePeer(peerAddr string, agent string) {
 	KnownPeersMutex.Lock()
 	defer KnownPeersMutex.Unlock()
 
 	p := types.Peer(peerAddr)
-	if record, exists := KnownPeers[p]; exists {
-		if record.Agent != agent {
-			record.Agent = agent
-			KnownPeers[p] = record
-			savePeers()
-		}
-	} else {
+	record, exists := KnownPeers[p]
+
+	if !exists {
 		// Just in case they dial us before we discovered them via gossiping
-		KnownPeers[p] = PeerRecord{Source: "direct", Agent: agent}
-		savePeers()
+		KnownPeers[p] = PeerRecord{Source: "direct"}
 	}
+	record.Agent = agent
+	record.LastSeen = time.Now().Unix()
+
+	KnownPeers[p] = record
+	savePeers()
 }
 
 func SelectRandomPeers(count int, ignoreIPs map[string]bool) []string {
@@ -204,5 +260,57 @@ func SelectRandomPeersPerSource(count int, ignoreIPs map[string]bool) []string {
 			}
 		}
 	}
+	return selected
+}
+
+// Select count peers, 80% of which are the most recently seen peers, and 20% are randomly selected
+func SelectRecentPeers(count int, ignoreIPs map[string]bool) []string {
+	KnownPeersMutex.Lock()
+	defer KnownPeersMutex.Unlock()
+
+	type peerData struct {
+		addr     string
+		lastSeen int64
+	}
+	var validPeers []peerData
+
+	for peer, record := range KnownPeers {
+		if peer != types.PEER_INVALID {
+			peerStr := string(peer)
+			if !ignoreIPs[peerStr] {
+				validPeers = append(validPeers, peerData{addr: peerStr, lastSeen: record.LastSeen})
+			}
+		}
+	}
+
+	// Sort (newest LastSeen first)
+	sort.Slice(validPeers, func(i, j int) bool {
+		return validPeers[i].lastSeen > validPeers[j].lastSeen
+	})
+
+	selected := make([]string, 0, count)
+
+	if len(validPeers) <= count {
+		for _, p := range validPeers {
+			selected = append(selected, p.addr)
+		}
+		return selected
+	}
+
+	recentCount := int(float64(count) * 0.8)
+	randomCount := count - recentCount
+
+	for i := range recentCount {
+		selected = append(selected, validPeers[i].addr)
+	}
+
+	remaining := validPeers[recentCount:]
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	perm := rng.Perm(len(remaining))
+
+	for i := range randomCount {
+		selected = append(selected, remaining[perm[i]].addr)
+	}
+
 	return selected
 }
