@@ -91,6 +91,13 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) (types.Picabu, type
 	}
 	var verifyQueue []sigData
 
+	type outpointKey struct {
+		txid types.HashID
+		idx  int
+	}
+
+	outpoints := make(map[outpointKey]bool)
+
 	for i, input := range tx.Inputs {
 		outpoint := input.Outpoint
 
@@ -116,6 +123,13 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) (types.Picabu, type
 		if idx < 0 || idx >= len(outputs) {
 			return types.ZERO_PICABU, types.E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid output index")
 		}
+
+		// Check for duplicate outpoints
+		key := outpointKey{txid: outpoint.Txid, idx: idx}
+		if outpoints[key] {
+			return types.ZERO_PICABU, types.E_INVALID_TX_OUTPOINT, fmt.Errorf("Multiple inputs have the same outpoint.")
+		}
+		outpoints[key] = true
 
 		output := outputs[idx]
 		sumInputs.Add(sumInputs, (*big.Int)(output.Value))
