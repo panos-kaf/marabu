@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"cmp"
 	"marabu/internal/logs"
 	"marabu/internal/types"
 )
@@ -18,7 +19,7 @@ func (p *Peer) logInfo(message string) {
 		MessageType: types.MSG_NONE,
 		ErrorCode:   types.E_NONE,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     false,
 		Message:     message,
 		Origin:      p.origin,
@@ -27,11 +28,12 @@ func (p *Peer) logInfo(message string) {
 }
 
 func (p *Peer) errInfo(message string) {
+
 	entry := logs.LogEntry{
 		MessageType: types.MSG_NONE,
 		ErrorCode:   types.E_NONE,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     true,
 		Message:     message,
 		Origin:      p.origin,
@@ -44,7 +46,7 @@ func (p *Peer) log(mtype types.MessageType, code types.ErrorCode, message string
 		MessageType: mtype,
 		ErrorCode:   code,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     false,
 		Message:     message,
 		Origin:      p.origin,
@@ -57,7 +59,7 @@ func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string
 		MessageType: mtype,
 		ErrorCode:   code,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     true,
 		Message:     message,
 		Origin:      p.origin,
@@ -70,7 +72,7 @@ func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends b
 		MessageType: mtype,
 		ErrorCode:   code,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     false,
 		Origin:      p.origin,
 	}
@@ -88,7 +90,7 @@ func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message
 		MessageType: mtype,
 		ErrorCode:   code,
 		ID:          p.ID,
-		Addr:        p.addr,
+		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     true,
 		Message:     message,
 		Origin:      p.origin,
