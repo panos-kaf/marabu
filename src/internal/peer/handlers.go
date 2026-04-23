@@ -22,7 +22,7 @@ func (p *Peer) handleHello(msg *protocol.Hello) {
 	p.handshakeComplete = true
 
 	p.agent = agent
-	discovery.UpdateAgent(p.addr, agent)
+	discovery.UpdatePeer(p.addr, agent)
 }
 
 func (p *Peer) handleError(msg *protocol.Error) {
