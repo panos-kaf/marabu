@@ -14,8 +14,12 @@ import (
 var versionRegex = regexp.MustCompile(`^0\.10\.[0-9]+$`)
 
 const (
-	maxArrLen = 1000
-	maxStrLen = 1000
+	maxArrLen      = 1000
+	maxStrLen      = 1000
+	maxBuStringLen = 128
+
+	// Student IDs
+	maxBuStringsLen = 10
 )
 
 func (mt *MessageType) UnmarshalJSON(data []byte) error {
@@ -226,8 +230,14 @@ func (s *BuString) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid string format: %w", err)
 	}
 
-	if len(str) > maxStrLen {
-		return fmt.Errorf("string exceeds maximum length of %d characters, got %d", maxStrLen, len(str))
+	for i := 0; i < len(str); i++ {
+		if str[i] < 32 || str[i] > 126 {
+			return fmt.Errorf("non-printable ascii char: %X", str[i])
+		}
+	}
+
+	if len(str) > maxBuStringLen {
+		return fmt.Errorf("string exceeds maximum length of %d characters, got %d", maxBuStringLen, len(str))
 	}
 	*s = BuString(str)
 	return nil
@@ -253,7 +263,7 @@ func (arr *BuInts) UnmarshalJSON(data []byte) error {
 	return UnmarshalArray(data, (*[]BuInt)(arr), 0, maxArrLen, "BuInts")
 }
 func (arr *BuStrings) UnmarshalJSON(data []byte) error {
-	return UnmarshalArray(data, (*[]BuString)(arr), 0, maxArrLen, "BuStrings")
+	return UnmarshalArray(data, (*[]BuString)(arr), 0, maxBuStringsLen, "BuStrings")
 }
 func (arr *HashIDs) UnmarshalJSON(data []byte) error {
 	return UnmarshalArray(data, (*[]HashID)(arr), 0, maxArrLen, "HashIDs")
