@@ -61,7 +61,7 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 				p.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, p.addr, err))
 				hasErrors.Store(true)
 			}
-		}(peer) // Pass 'peer' into the closure to avoid variable capture bugs
+		}(peer)
 	}
 
 	// Wait for all goroutines to finish sending

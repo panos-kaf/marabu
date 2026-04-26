@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const MaxOutbound = 10
+const MaxOutbound = 15
 
 var pendingDials atomic.Int32
 
@@ -37,6 +37,7 @@ func StartTopologyManager(Manager *core.Manager) {
 		}
 	}
 }
+
 func churnRandomPeer() {
 
 	disposablePeers := ConnManager.GetDisposable()
@@ -103,6 +104,6 @@ func replenishOutbound(Manager *core.Manager) {
 	if finalCount > 0 {
 		globalLog(fmt.Sprintf("Topology Manager: Successfully connected to %d new peers", finalCount))
 	} else {
-		globalLog("Topology Manager: Found 0 active peers in this batch.")
+		// globalLog("Topology Manager: Found 0 active peers in this batch.")
 	}
 }

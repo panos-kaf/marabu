@@ -38,15 +38,15 @@ func Start(manager *core.Manager) {
 		switch cmd {
 		case "help":
 			fmt.Println("Available commands:")
-			fmt.Println("  info                  - Show node diagnostics and chaintip")
+			fmt.Println("  info, i, ?            - Show node diagnostics and chaintip")
 			fmt.Println("  peers [list]          - List detailed connected peers")
 			fmt.Println("  peers add <ip:port>   - Manually connect to a node")
 			fmt.Println("  peers drop <ip:port>  - Disconnect from a node")
 			fmt.Println("  objects get <hash>    - Fetch and display an object from the database")
 			fmt.Println("  network sync          - Force broadcast GetPeers and GetChainTip")
-			fmt.Println("  exit                  - Exit the CLI")
+			fmt.Println("  exit, quit, q         - Exit the CLI")
 
-		case "info":
+		case "info", "?", "i":
 			// Fetch networking stats
 			icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
 
@@ -63,7 +63,7 @@ func Start(manager *core.Manager) {
 			}
 			fmt.Println("-------------------")
 
-		case "peers":
+		case "peers", "p":
 			if len(args) == 1 || args[1] == "list" {
 				listPeers()
 			} else if args[1] == "add" && len(args) == 3 {
@@ -74,7 +74,7 @@ func Start(manager *core.Manager) {
 				fmt.Println("Usage: peers [list | add <ip:port> | drop <ip:port>]")
 			}
 
-		case "objects":
+		case "objects", "o":
 			if len(args) == 3 && args[1] == "get" {
 				inspectObject(args[2], manager)
 			} else if len(args) == 2 && args[1] == "list" {
@@ -93,7 +93,7 @@ func Start(manager *core.Manager) {
 				fmt.Println("Usage: network sync")
 			}
 
-		case "exit":
+		case "exit", "quit", "q":
 			fmt.Println("Exiting CLI...")
 			os.Exit(0)
 
@@ -187,8 +187,6 @@ func inspectObject(hashStr string, manager *core.Manager) {
 	fmt.Println(string(prettyJSON))
 	fmt.Println("----------------------------------------------------------------")
 }
-
-// Add to the bottom of ui/console.go
 
 func listObjects(manager *core.Manager) {
 	ids, err := manager.GetAllObjectIDs()
