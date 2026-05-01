@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const genesisHash = "00000000522473196b73bc619a8b18472c4cb4c6caf785a13fa32aaae7222ff6"
+
 type ValidationResult struct {
 	ObjID     types.HashID
 	Fee       types.Picabu
@@ -211,6 +213,9 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 	var height uint64
 
 	if isGenesis {
+		if blockid != genesisHash {
+			return types.E_INVALID_GENESIS, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("invalid genesis block")
+		}
 		height = 0
 	} else {
 		UTXO, err := m.db.getUTXO(*blk.Previd)
