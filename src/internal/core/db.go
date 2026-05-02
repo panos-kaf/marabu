@@ -337,7 +337,7 @@ func (d *database) checkPendingBlocks() []struct {
 		Txid  types.HashID
 	}
 
-	timeout := 5 * time.Second
+	timeout := 2 * time.Second
 
 	for txid, blocks := range d.pendingBlocks {
 		var stillPending []PendingBlock

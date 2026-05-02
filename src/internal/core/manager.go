@@ -105,7 +105,7 @@ func (m *Manager) FetchPendingBlocks(resolvedObjID types.HashID) []PendingBlock 
 }
 
 func (m *Manager) CleanupPendingBlocks(notifyPeer func(peerAddr string, txid types.HashID)) {
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 
 	for range ticker.C {
 		expiredBlocks := m.db.checkPendingBlocks()
