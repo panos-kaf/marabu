@@ -15,20 +15,22 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-// Define PendingBlock here since we removed the storage package
 type PendingBlock struct {
 	Block     *types.Block
 	Timestamp time.Time
 	Peer      string
 }
 
-// database is lowercase, making it completely private to the blockchain package
+// database is private
 type database struct {
 	db *leveldb.DB
 
 	pendingFinds  map[types.HashID][]chan types.Object
 	pendingMutex  sync.Mutex
 	pendingBlocks map[types.HashID][]PendingBlock
+
+	mempool      Mempool
+	mempoolMutex sync.RWMutex
 }
 
 func newDatabase(path string) (*database, error) {
@@ -40,10 +42,11 @@ func newDatabase(path string) (*database, error) {
 		db:            db,
 		pendingFinds:  make(map[types.HashID][]chan types.Object),
 		pendingBlocks: make(map[types.HashID][]PendingBlock),
+		mempool:       Mempool{Entries: make(map[types.HashID]MempoolEntry)},
 	}, nil
 }
 
-// --- Internal Data Structures ---
+// Internal Data Structures
 
 type UTXOKey struct {
 	Txid  types.HashID
@@ -67,6 +70,17 @@ type UTXOStorageData struct {
 	Records []UTXORecord `json:"records"`
 }
 
+type MempoolEntry struct {
+	TxID      types.HashID       `json:"txid"`
+	Tx        *types.Transaction `json:"tx"`
+	Fee       types.Picabu       `json:"fee"`
+	Timestamp time.Time          `json:"timestamp"`
+}
+
+type Mempool struct {
+	Entries map[types.HashID]MempoolEntry `json:"entries"`
+}
+
 type Chaintip struct {
 	BlockID types.HashID `json:"blockid"`
 	Height  uint64       `json:"height"`
@@ -74,7 +88,7 @@ type Chaintip struct {
 
 var chaintipKey = []byte("chaintip")
 
-// --- Private CRUD Methods ---
+// Private CRUD Methods
 
 func (d *database) existsObject(id types.HashID) (bool, error) {
 	return d.db.Has([]byte(id), nil)
@@ -297,6 +311,76 @@ func (d *database) notifyWaiters(id types.HashID, obj types.Object) {
 		close(ch)
 	}
 	delete(d.pendingFinds, id)
+}
+
+func (d *database) addMempoolEntry(tx *types.Transaction, fee types.Picabu) error {
+
+	txid, err := crypto.HashObject(tx)
+	if err != nil {
+		return fmt.Errorf("error hashing transaction: %v", err)
+	}
+
+	entry := MempoolEntry{
+		TxID:      types.HashID(txid),
+		Tx:        tx,
+		Fee:       fee,
+		Timestamp: time.Now(),
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("error serializing mempool entry: %v", err)
+	}
+
+	key := []byte("mempool-" + string(entry.TxID))
+	if err := d.db.Put(key, data, nil); err != nil {
+		return fmt.Errorf("error storing mempool entry: %v", err)
+	}
+
+	if err := d.putFee(entry.TxID, fee); err != nil {
+		return fmt.Errorf("error storing fee for mempool entry: %v", err)
+	}
+
+	d.mempoolMutex.Lock()
+	d.mempool.Entries[entry.TxID] = entry
+	d.mempoolMutex.Unlock()
+
+	return nil
+}
+
+func (d *database) removeMempoolEntry(txid types.HashID) error {
+	key := []byte("mempool-" + string(txid))
+	if err := d.db.Delete(key, nil); err != nil {
+		return fmt.Errorf("error removing mempool entry: %v", err)
+	}
+	if err := d.db.Delete([]byte("fee-"+string(txid)), nil); err != nil {
+		return fmt.Errorf("error removing fee for mempool entry: %v", err)
+	}
+
+	d.mempoolMutex.Lock()
+	delete(d.mempool.Entries, txid)
+	d.mempoolMutex.Unlock()
+
+	return nil
+}
+
+func (d *database) existsInMempool(txid types.HashID) (bool, error) {
+	d.mempoolMutex.RLock()
+	defer d.mempoolMutex.RUnlock()
+
+	_, exists := d.mempool.Entries[txid]
+	return exists, nil
+}
+
+func (d *database) getMempoolEntries() []MempoolEntry {
+	d.mempoolMutex.RLock()
+	defer d.mempoolMutex.RUnlock()
+
+	var entries []MempoolEntry
+	for _, entry := range d.mempool.Entries {
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 // --- Thread-Safe Pending Block Management ---

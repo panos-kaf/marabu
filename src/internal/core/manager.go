@@ -32,7 +32,7 @@ func (m *Manager) CommitObject(obj types.Object, result ValidationResult) error 
 	}
 
 	// Apply type-specific database updates
-	switch obj.(type) {
+	switch o := obj.(type) {
 	case *types.Transaction:
 		if err := m.db.putFee(result.ObjID, result.Fee); err != nil {
 			return fmt.Errorf("error storing fee: %v", err)
@@ -47,6 +47,13 @@ func (m *Manager) CommitObject(obj types.Object, result ValidationResult) error 
 		if result.IsNewTip {
 			if err := m.db.putChaintip(result.ObjID, result.NewHeight); err != nil {
 				return fmt.Errorf("failed to update chaintip: %v", err)
+			}
+		}
+
+		// we commited the block to the database, so we can remove its transactions from the mempool
+		for _, txid := range o.Txids {
+			if err := m.db.removeMempoolEntry(txid); err != nil {
+				return fmt.Errorf("failed to remove transaction from mempool: %v", err)
 			}
 		}
 	}
@@ -98,6 +105,28 @@ func (m *Manager) GetChaintip() (types.HashID, uint64, error) {
 		return types.DUMMY_HASH, 0, fmt.Errorf("DB error while fetching chaintip: %v", err)
 	}
 	return chaintip, height, nil
+}
+
+func (m *Manager) AddToMempool(tx *types.Transaction, fee types.Picabu) error {
+	if err := m.db.addMempoolEntry(tx, fee); err != nil {
+		return fmt.Errorf("failed to add transaction to mempool: %v", err)
+	}
+	return nil
+}
+
+func (m *Manager) RemoveFromMempool(txid types.HashID) error {
+	if err := m.db.removeMempoolEntry(txid); err != nil {
+		return fmt.Errorf("failed to remove transaction from mempool: %v", err)
+	}
+	return nil
+}
+
+func (m *Manager) ExistsInMempool(txid types.HashID) (bool, error) {
+	return m.db.existsInMempool(txid)
+}
+
+func (m *Manager) GetMempoolEntries() []MempoolEntry {
+	return m.db.getMempoolEntries()
 }
 
 func (m *Manager) FetchPendingBlocks(resolvedObjID types.HashID) []PendingBlock {
