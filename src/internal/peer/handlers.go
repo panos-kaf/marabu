@@ -115,7 +115,19 @@ func (p *Peer) handleGetMempool() {
 }
 
 func (p *Peer) handleMempool(msg *protocol.Mempool) {
-	p.log(msg.Type, types.E_NONE, "not handled yet")
+
+	for _, txid := range msg.Txids {
+		if exists, err := p.Manager.ExistsObject(txid); err != nil {
+			p.err(types.MSG_MEMPOOL, types.E_NONE, "Error checking if mempool transaction exists: "+err.Error())
+			continue
+		} else if exists {
+			p.log(types.MSG_MEMPOOL, types.E_NONE, "We already have mempool transaction "+string(txid))
+			continue
+		}
+
+		// only ask the peer that has the mempool
+		p.SendGetObject(txid)
+	}
 }
 
 func (p *Peer) handleGetChainTip() {
