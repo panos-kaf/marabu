@@ -136,6 +136,7 @@ func (p *Peer) Greet() {
 	p.SendHello()
 	p.SendGetPeers()
 	p.SendGetChainTip()
+	p.SendGetMempool()
 }
 
 // -- Top level broadcast functions for each message type --
