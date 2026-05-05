@@ -29,8 +29,9 @@ type database struct {
 	pendingMutex  sync.Mutex
 	pendingBlocks map[types.HashID][]PendingBlock
 
-	mempool      Mempool
-	mempoolMutex sync.RWMutex
+	mempool            map[types.HashID]MempoolEntry
+	mempoolSpentInputs map[OutpointKey]types.HashID
+	mempoolMutex       sync.RWMutex
 }
 
 func newDatabase(path string) (*database, error) {
@@ -39,28 +40,29 @@ func newDatabase(path string) (*database, error) {
 		return nil, err
 	}
 	return &database{
-		db:            db,
-		pendingFinds:  make(map[types.HashID][]chan types.Object),
-		pendingBlocks: make(map[types.HashID][]PendingBlock),
-		mempool:       Mempool{Entries: make(map[types.HashID]MempoolEntry)},
+		db:                 db,
+		pendingFinds:       make(map[types.HashID][]chan types.Object),
+		pendingBlocks:      make(map[types.HashID][]PendingBlock),
+		mempool:            make(map[types.HashID]MempoolEntry),
+		mempoolSpentInputs: make(map[OutpointKey]types.HashID),
 	}, nil
 }
 
 // Internal Data Structures
 
-type UTXOKey struct {
+type OutpointKey struct {
 	Txid  types.HashID
 	Index int
 }
 
 type UTXOSet struct {
 	BlockID types.HashID
-	UTXOs   map[UTXOKey]types.TxOutput
+	UTXOs   map[OutpointKey]types.TxOutput
 	Height  uint64
 }
 
 type UTXORecord struct {
-	Key   UTXOKey        `json:"key"`
+	Key   OutpointKey    `json:"key"`
 	Value types.TxOutput `json:"value"`
 }
 
@@ -75,10 +77,6 @@ type MempoolEntry struct {
 	Tx        *types.Transaction `json:"tx"`
 	Fee       types.Picabu       `json:"fee"`
 	Timestamp time.Time          `json:"timestamp"`
-}
-
-type Mempool struct {
-	Entries map[types.HashID]MempoolEntry `json:"entries"`
 }
 
 type Chaintip struct {
@@ -238,7 +236,7 @@ func (d *database) getUTXO(blockid types.HashID) (UTXOSet, error) {
 	utxo := UTXOSet{
 		BlockID: data.BlockID,
 		Height:  data.Height,
-		UTXOs:   make(map[UTXOKey]types.TxOutput),
+		UTXOs:   make(map[OutpointKey]types.TxOutput),
 	}
 
 	for _, record := range data.Records {
@@ -342,8 +340,14 @@ func (d *database) addMempoolEntry(tx *types.Transaction, fee types.Picabu) erro
 	}
 
 	d.mempoolMutex.Lock()
-	d.mempool.Entries[entry.TxID] = entry
-	d.mempoolMutex.Unlock()
+	defer d.mempoolMutex.Unlock()
+
+	d.mempool[entry.TxID] = entry
+
+	for _, input := range tx.Inputs {
+		key := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+		d.mempoolSpentInputs[key] = types.HashID(txid)
+	}
 
 	return nil
 }
@@ -358,8 +362,15 @@ func (d *database) removeMempoolEntry(txid types.HashID) error {
 	}
 
 	d.mempoolMutex.Lock()
-	delete(d.mempool.Entries, txid)
-	d.mempoolMutex.Unlock()
+	defer d.mempoolMutex.Unlock()
+
+	delete(d.mempool, txid)
+	if entry, exists := d.mempool[txid]; exists {
+		for _, input := range entry.Tx.Inputs {
+			key := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+			delete(d.mempoolSpentInputs, key)
+		}
+	}
 
 	return nil
 }
@@ -368,7 +379,7 @@ func (d *database) existsInMempool(txid types.HashID) (bool, error) {
 	d.mempoolMutex.RLock()
 	defer d.mempoolMutex.RUnlock()
 
-	_, exists := d.mempool.Entries[txid]
+	_, exists := d.mempool[txid]
 	return exists, nil
 }
 
@@ -377,10 +388,29 @@ func (d *database) getMempoolEntries() []MempoolEntry {
 	defer d.mempoolMutex.RUnlock()
 
 	var entries []MempoolEntry
-	for _, entry := range d.mempool.Entries {
+	for _, entry := range d.mempool {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func (d *database) loadMempool() ([]MempoolEntry, error) {
+
+	var mempool []MempoolEntry
+
+	iter := d.db.NewIterator(nil, nil)
+	defer iter.Release()
+
+	for iter.Next() {
+		// Only look at keys that start with the mempool prefix
+		if strings.HasPrefix(string(iter.Key()), "mempool-") {
+			var entry MempoolEntry
+			if err := json.Unmarshal(iter.Value(), &entry); err == nil {
+				mempool = append(mempool, entry)
+			}
+		}
+	}
+	return mempool, iter.Error()
 }
 
 // --- Thread-Safe Pending Block Management ---
@@ -394,6 +424,19 @@ func (d *database) addPendingBlock(peer string, missingID types.HashID, block *t
 		Timestamp: time.Now(),
 		Peer:      peer,
 	})
+}
+
+func (d *database) getPendingBlocksCount() int {
+	d.pendingMutex.Lock()
+	defer d.pendingMutex.Unlock()
+	return len(d.pendingBlocks)
+}
+
+func (d *database) isNeededForPendingBlock(id types.HashID) bool {
+	d.pendingMutex.Lock()
+	defer d.pendingMutex.Unlock()
+	_, exists := d.pendingBlocks[id]
+	return exists
 }
 
 // Safely fetches pending blocks and clears them from the map in one locked action
