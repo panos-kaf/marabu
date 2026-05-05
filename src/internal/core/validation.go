@@ -93,15 +93,16 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) (types.Picabu, type
 	}
 	var verifyQueue []sigData
 
-	type outpointKey struct {
-		txid types.HashID
-		idx  int
-	}
-
-	outpoints := make(map[outpointKey]bool)
+	outpoints := make(map[OutpointKey]bool)
 
 	for i, input := range tx.Inputs {
 		outpoint := input.Outpoint
+		idx := int(*outpoint.Index)
+
+		key := OutpointKey{Txid: outpoint.Txid, Index: idx}
+		if m.IsInputSpent(key) {
+			return types.ZERO_PICABU, types.E_INVALID_TX_OUTPOINT, fmt.Errorf("Input %d is already being spent by another transaction in the mempool", i)
+		}
 
 		obj, err := m.db.getObject(outpoint.Txid)
 		if err != nil {
@@ -121,13 +122,11 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) (types.Picabu, type
 			return types.ZERO_PICABU, types.E_INTERNAL_ERROR, fmt.Errorf("Referenced object is of unknown type")
 		}
 
-		idx := int(*outpoint.Index)
 		if idx < 0 || idx >= len(outputs) {
 			return types.ZERO_PICABU, types.E_INVALID_TX_OUTPOINT, fmt.Errorf("Invalid output index")
 		}
 
 		// Check for duplicate outpoints
-		key := outpointKey{txid: outpoint.Txid, idx: idx}
 		if outpoints[key] {
 			return types.ZERO_PICABU, types.E_INVALID_TX_OUTPOINT, fmt.Errorf("Multiple inputs have the same outpoint.")
 		}
@@ -209,7 +208,7 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 		}
 	}
 
-	utxos := make(map[UTXOKey]types.TxOutput)
+	utxos := make(map[OutpointKey]types.TxOutput)
 	var height uint64
 
 	if isGenesis {
@@ -250,7 +249,7 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 				if hasCoinbase && input.Outpoint.Txid == cbID {
 					return types.E_INVALID_TX_OUTPOINT, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Cannot spend coinbase transaction in the same block")
 				}
-				key := UTXOKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+				key := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
 				spentOutput, exists := utxos[key]
 				if !exists {
 					return types.E_INVALID_TX_OUTPOINT, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Invalid input: %s (not found in UTXO set)", txid)
@@ -260,7 +259,7 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 			}
 			for idx, output := range t.Outputs {
 				sumOut.Add(sumOut, (*big.Int)(output.Value))
-				utxos[UTXOKey{Txid: txid, Index: idx}] = output
+				utxos[OutpointKey{Txid: txid, Index: idx}] = output
 			}
 			fees.Add(fees, new(big.Int).Sub(sumIn, sumOut))
 
@@ -276,7 +275,7 @@ func (m *Manager) ValidateBlock(blk *types.Block, peerAddr string) (types.ErrorC
 			if uint64(*t.Height) != height {
 				return types.E_INVALID_BLOCK_COINBASE, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Coinbase transaction has height %d, while its block has height %d", *t.Height, height)
 			}
-			utxos[UTXOKey{Txid: cbID, Index: 0}] = t.Outputs[0]
+			utxos[OutpointKey{Txid: cbID, Index: 0}] = t.Outputs[0]
 		default:
 			return types.E_INTERNAL_ERROR, types.DUMMY_HASH, nil, false, 0, fmt.Errorf("Referenced object is of unknown type")
 		}
