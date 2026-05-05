@@ -19,6 +19,23 @@ func (p *Peer) acceptObject(msgType types.MessageType, obj types.Object, result 
 		return
 	}
 
+	isMempoolConflict := false
+	if tx, ok := obj.(*types.Transaction); ok {
+		for _, input := range tx.Inputs {
+			outpoint := core.OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+			if p.Manager.IsInputSpent(outpoint) {
+				isMempoolConflict = true
+				break
+			}
+		}
+
+		// If it's a conflict and we don't need it for a block, drop it
+		if isMempoolConflict && !p.Manager.IsNeededForPendingBlock(result.ObjID) {
+			p.err(msgType, types.E_INVALID_TX_OUTPOINT, "Mempool double-spend detected.")
+			return
+		}
+	}
+
 	// Store the object and apply state changes
 	if err := p.Manager.CommitObject(obj, result); err != nil {
 		p.err(msgType, types.E_NONE, "Failed to apply state: "+err.Error())
@@ -26,20 +43,25 @@ func (p *Peer) acceptObject(msgType types.MessageType, obj types.Object, result 
 	}
 	p.logInfo(fmt.Sprintf("Successfully processed and stored %s", result.ObjID))
 
-	
 	if tx, ok := obj.(*types.Transaction); ok {
-		p.Manager.AddToMempool(tx, result.Fee)
-	}
-	
-	// Gossip
-	BroadcastIHaveObject(result.ObjID)
 
+		// Only add to mempool and gossip if it ISN'T a conflict
+		if !isMempoolConflict {
+			p.Manager.AddToMempool(tx, result.Fee)
+			BroadcastIHaveObject(result.ObjID)
+		} else {
+			p.logInfo(fmt.Sprintf("Tx %s saved for pending block, but withheld from mempool due to conflict.", result.ObjID))
+		}
+	} else {
+		// gossip
+		BroadcastIHaveObject(result.ObjID)
+	}
 	// Resolve pending blocks that depended on this object
 	p.resolvePendingBlocks(msgType, result.ObjID)
 }
 
 func (p *Peer) resolvePendingBlocks(msgType types.MessageType, resolvedObjID types.HashID) {
-	
+
 	// Fetch and clear pending blocks waiting on this object
 	pendingBlocks := p.Manager.FetchPendingBlocks(resolvedObjID)
 
