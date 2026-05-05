@@ -136,7 +136,9 @@ func (p *Peer) Greet() {
 	p.SendHello()
 	p.SendGetPeers()
 	p.SendGetChainTip()
-	p.SendGetMempool()
+
+	// we wait to sync before requesting mempool
+	// p.SendGetMempool()
 }
 
 // -- Top level broadcast functions for each message type --
