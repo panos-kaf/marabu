@@ -160,6 +160,8 @@ func (p *Peer) handleChainTip(msg *protocol.ChainTip) {
 
 	p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" sent chain tip: "+string(msg.BlockID))
 
+	p.Manager.IncrementChaintipsReceived()
+
 	exists, e := p.Manager.ExistsObject(msg.BlockID)
 	if e != nil {
 		p.err(msg.Type, types.E_NONE, "Error checking if chain tip exists: "+e.Error())
