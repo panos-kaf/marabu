@@ -18,7 +18,6 @@ import (
 func StartNode(Manager *core.Manager) {
 
 	logs.GlobalLog("Starting marabu, only connecting to bootstrap nodes")
-	go peer.StartServer(18018, Manager)
 
 	for _, p := range discovery.BOOTSTRAP_PEERS {
 		go func(p types.Peer) {

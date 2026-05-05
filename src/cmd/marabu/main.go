@@ -28,7 +28,13 @@ func main() {
 
 	Manager := core.NewManager(DB_PATH)
 
+	Manager.InitializeMempool()
+
 	go Manager.CleanupPendingBlocks(peer.NotifyPeerUnfindable)
+
+	go Manager.SyncNodeState(peer.BroadcastGetMempool)
+
+	go peer.StartServer(18018, Manager)
 
 	bootstrap.StartNode(Manager)
 	ui.Start(Manager)
