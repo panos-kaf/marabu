@@ -14,7 +14,15 @@ func globalError(msg string) {
 	logs.GlobalError(msg)
 }
 
+func (p *Peer) isMuted() bool {
+	return ConnManager.IsMuted(p.host) || ConnManager.IsMuted(p.agent) || ConnManager.IsMuted(p.addr)
+}
+
 func (p *Peer) logInfo(message string) {
+
+	if p.isMuted() {
+		return
+	}
 	entry := logs.LogEntry{
 		MessageType: types.MSG_NONE,
 		ErrorCode:   types.E_NONE,
@@ -29,6 +37,10 @@ func (p *Peer) logInfo(message string) {
 
 func (p *Peer) errInfo(message string) {
 
+	if p.isMuted() {
+		return
+	}
+
 	entry := logs.LogEntry{
 		MessageType: types.MSG_NONE,
 		ErrorCode:   types.E_NONE,
@@ -42,6 +54,11 @@ func (p *Peer) errInfo(message string) {
 }
 
 func (p *Peer) log(mtype types.MessageType, code types.ErrorCode, message string) {
+
+	if p.isMuted() {
+		return
+	}
+
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -55,6 +72,11 @@ func (p *Peer) log(mtype types.MessageType, code types.ErrorCode, message string
 }
 
 func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string) {
+
+	if p.isMuted() {
+		return
+	}
+
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -68,6 +90,11 @@ func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string
 }
 
 func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends bool) {
+
+	if p.isMuted() {
+		return
+	}
+
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
@@ -86,6 +113,11 @@ func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends b
 }
 
 func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message string, sends bool) {
+
+	if p.isMuted() {
+		return
+	}
+
 	entry := logs.LogEntry{
 		MessageType: mtype,
 		ErrorCode:   code,
