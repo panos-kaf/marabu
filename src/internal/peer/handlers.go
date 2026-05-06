@@ -2,6 +2,7 @@ package peer
 
 import (
 	"errors"
+	"fmt"
 	"marabu/internal/core"
 	"marabu/internal/discovery"
 	"marabu/internal/protocol"
@@ -12,13 +13,19 @@ import (
 func (p *Peer) handleHello(msg *protocol.Hello) {
 
 	agent := "unknown"
-
 	if msg.Agent != nil {
 		agent = string(*msg.Agent)
-		p.log(msg.Type, types.E_NONE, string(*msg.Agent)+" ("+p.addr+") says hello, version: "+string(msg.Version))
-	} else {
-		p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" says hello, version: "+string(msg.Version))
 	}
+
+	if ConnManager.IsBanned(p.host) || ConnManager.IsBanned(agent) || ConnManager.IsBanned(p.addr) {
+		p.err(msg.Type, types.E_NONE, fmt.Sprintf("Peer \"%s\" is banned.", agent))
+		p.SendError(types.E_INVALID_HANDSHAKE, "Your agent is banned from this node.")
+		p.Disconnect()
+		return
+	}
+
+	p.log(msg.Type, types.E_NONE, string(*msg.Agent)+" ("+p.addr+") says hello, version: "+string(msg.Version))
+
 	p.handshakeComplete = true
 
 	p.agent = agent

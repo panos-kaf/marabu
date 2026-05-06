@@ -22,6 +22,7 @@ type Peer struct {
 	conn              net.Conn
 	agent             string
 	addr              string
+	host              string
 	ID                int
 	buffer            []byte
 	handshakeComplete bool
@@ -50,6 +51,8 @@ func NewPeer(conn net.Conn,
 		done:         make(chan struct{}),
 	}
 
+	p.host, _, _ = net.SplitHostPort(addr)
+
 	err := ConnManager.Add(p)
 	if err != nil {
 		p.conn.Close()
@@ -66,9 +69,6 @@ func (p *Peer) Addr() string         { return p.addr }
 func (p *Peer) Agent() string        { return p.agent }
 func (p *Peer) Origin() types.Origin { return p.origin }
 func (p *Peer) IsPersistent() bool   { return p.isPersistent }
-func (p *Peer) Disconnect() {
-	p.conn.Close()
-}
 
 func (p *Peer) Routine(interval time.Duration, fn func()) {
 	ticker := time.NewTicker(interval)
@@ -103,14 +103,14 @@ func (p *Peer) initializeSocket() {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			p.disconnect()
+			p.Disconnect()
 			return
 		}
 		p.handleMessage(line)
 	}
 }
 
-func (p *Peer) disconnect() {
+func (p *Peer) Disconnect() {
 	select {
 	case <-p.done:
 		// already closed, do nothing
@@ -145,7 +145,7 @@ func (p *Peer) handleMessage(raw string) {
 		p.errInfo("Invalid message: " + err.Error())
 		p.SendError(types.E_INVALID_FORMAT, "Could not validate JSON message: "+err.Error())
 		if !p.handshakeComplete {
-			p.disconnect()
+			p.Disconnect()
 		}
 		return
 	}
@@ -159,7 +159,7 @@ func (p *Peer) handleMessage(raw string) {
 	if !p.handshakeComplete && msg.MessageType() != types.MSG_HELLO {
 		p.errMessage(msg.MessageType(), types.E_NONE, "Failed handshake.Expected hello message first", false)
 		p.SendError(types.E_INVALID_HANDSHAKE, "Handshake not completed, expected hello message but received "+string(msg.MessageType()))
-		p.disconnect()
+		p.Disconnect()
 		return
 	}
 
@@ -190,7 +190,7 @@ func (p *Peer) handleMessage(raw string) {
 	default:
 		p.errInfo("Unknown message type")
 		p.SendError(types.E_INVALID_FORMAT, "Unknown protocol message")
-		p.disconnect()
+		p.Disconnect()
 	}
 }
 
@@ -210,6 +210,13 @@ func StartServer(port int, Manager *core.Manager) error {
 		}
 
 		addr := conn.RemoteAddr().String()
+		host, _, _ := net.SplitHostPort(addr)
+
+		if ConnManager.IsBanned(host) {
+			globalLog(fmt.Sprintf("Rejected connection from banned IP: %s", host))
+			conn.Close()
+			continue
+		}
 
 		p, err := NewPeer(conn, types.Inbound, false, Manager)
 
@@ -224,6 +231,10 @@ func StartServer(port int, Manager *core.Manager) error {
 }
 
 func StartClient(host string, port int, isPersistent bool, Manager *core.Manager) error {
+
+	if ConnManager.IsBanned(host) {
+		return fmt.Errorf("peer IP %s is banned, aborting dial", host)
+	}
 
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
