@@ -36,17 +36,23 @@ func Start(manager *core.Manager) {
 		cmd := strings.ToLower(args[0])
 
 		switch cmd {
-		case "help":
+		case "help", "?", "h":
 			fmt.Println("Available commands:")
-			fmt.Println("  info, i, ?            - Show node diagnostics and chaintip")
-			fmt.Println("  peers [list]          - List detailed connected peers")
-			fmt.Println("  peers add <ip:port>   - Manually connect to a node")
-			fmt.Println("  peers drop <ip:port>  - Disconnect from a node")
-			fmt.Println("  objects get <hash>    - Fetch and display an object from the database")
-			fmt.Println("  network sync          - Force broadcast GetPeers and GetChainTip")
-			fmt.Println("  exit, quit, q         - Exit the CLI")
+			fmt.Println("  info, i, status         - Show node diagnostics and chaintip")
+			fmt.Println("  peers, p                - List detailed connected peers")
+			fmt.Println("  connect <ip:port>       - Manually connect to a node")
+			fmt.Println("  disconnect <ip:port>    - Disconnect from a node (alias: drop)")
+			fmt.Println("  mute <ip|agent> <val>   - Mute logs from a spammy IP or Agent")
+			fmt.Println("  unmute <ip|agent> <val> - Unmute logs")
+			fmt.Println("  ban <target>            - Ban and kick an IP or Agent")
+			fmt.Println("  unban <target>          - Unban an IP or Agent")
+			fmt.Println("  banned                  - List all currently banned targets")
+			fmt.Println("  objects, o              - List all objects in the database")
+			fmt.Println("  get <hash>              - Fetch and display a specific object")
+			fmt.Println("  sync                    - Force broadcast GetPeers and GetChainTip")
+			fmt.Println("  exit, quit, q           - Exit the CLI")
 
-		case "info", "?", "i":
+		case "info", "i", "status":
 			// Fetch networking stats
 			icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
 
@@ -64,34 +70,96 @@ func Start(manager *core.Manager) {
 			fmt.Println("-------------------")
 
 		case "peers", "p":
-			if len(args) == 1 || args[1] == "list" {
-				listPeers()
-			} else if args[1] == "add" && len(args) == 3 {
-				connectToPeer(args[2], manager)
-			} else if args[1] == "drop" && len(args) == 3 {
-				disconnectPeer(args[2])
+			listPeers()
+
+		case "connect":
+			if len(args) == 2 {
+				connectToPeer(args[1], manager)
 			} else {
-				fmt.Println("Usage: peers [list | add <ip:port> | drop <ip:port>]")
+				fmt.Println("Usage: connect <ip:port>")
+			}
+
+		case "disconnect", "drop":
+			if len(args) == 2 {
+				disconnectPeer(args[1])
+			} else {
+				fmt.Println("Usage: disconnect <ip:port>")
+			}
+
+		case "muted":
+			listMuted() // The new standalone command
+
+		case "mute":
+			if len(args) == 2 && args[1] == "list" {
+				listMuted()
+			} else if len(args) >= 2 {
+				val := strings.Join(args[1:], " ")
+				peer.ConnManager.MutePeer(val)
+				fmt.Printf("Muted logs matching: %s\n", val)
+			} else {
+				fmt.Println("Usage: mute <ip or agent> OR mute list")
+			}
+
+		case "unmute":
+			if len(args) >= 2 {
+				val := strings.Join(args[1:], " ")
+
+				// NEW: Check for the wildcard
+				if val == "*" {
+					cleared := peer.ConnManager.UnmuteAll()
+					fmt.Printf("Cleared %d mute rules. All peers unmuted.\n", cleared)
+				} else {
+					peer.ConnManager.UnmutePeer(val)
+					fmt.Printf("Unmuted logs matching: %s\n", val)
+				}
+			} else {
+				fmt.Println("Usage: unmute <ip or agent> OR unmute *")
+			}
+		case "banned":
+			listBanned()
+
+		case "ban":
+			if len(args) == 2 && args[1] == "list" {
+				listBanned()
+			} else if len(args) >= 2 {
+				val := strings.Join(args[1:], " ")
+				peer.ConnManager.BanPeer(val)
+				fmt.Printf("Banned and kicked target matching: %s\n", val)
+			} else {
+				fmt.Println("Usage: ban <ip or agent> OR ban list")
+			}
+
+		case "unban":
+			if len(args) >= 2 {
+				val := strings.Join(args[1:], " ")
+
+				// NEW: Check for the wildcard
+				if val == "*" {
+					cleared := peer.ConnManager.UnbanAll()
+					fmt.Printf("Cleared %d ban rules. All peers unbanned.\n", cleared)
+				} else {
+					peer.ConnManager.UnbanPeer(val)
+					fmt.Printf("Unbanned target matching: %s\n", val)
+				}
+			} else {
+				fmt.Println("Usage: unban <ip or agent> OR unban *")
 			}
 
 		case "objects", "o":
-			if len(args) == 3 && args[1] == "get" {
-				inspectObject(args[2], manager)
-			} else if len(args) == 2 && args[1] == "list" {
-				listObjects(manager) // NEW
+			listObjects(manager)
+
+		case "get":
+			if len(args) == 2 {
+				inspectObject(args[1], manager)
 			} else {
-				fmt.Println("Usage: objects [list | get <hash>]")
+				fmt.Println("Usage: get <hash>")
 			}
 
-		case "network":
-			if len(args) == 2 && args[1] == "sync" {
-				fmt.Println("Forcing network sync...")
-				peer.BroadcastGetPeers()
-				peer.BroadcastGetChainTip()
-				fmt.Println("Sync requests broadcasted.")
-			} else {
-				fmt.Println("Usage: network sync")
-			}
+		case "sync":
+			fmt.Println("Forcing network sync...")
+			peer.BroadcastGetPeers()
+			peer.BroadcastGetChainTip()
+			fmt.Println("Sync requests broadcasted.")
 
 		case "exit", "quit", "q":
 			fmt.Println("Exiting CLI...")
@@ -186,6 +254,70 @@ func inspectObject(hashStr string, manager *core.Manager) {
 	fmt.Printf("--- Object %s ---\n", hashStr)
 	fmt.Println(string(prettyJSON))
 	fmt.Println("----------------------------------------------------------------")
+}
+
+func listMuted() {
+	records := peer.ConnManager.GetMuted()
+
+	fmt.Println("\n=== Muted Targets ===")
+
+	if len(records) == 0 {
+		fmt.Println("No peers are currently muted.")
+		fmt.Println("=====================")
+		return
+	}
+
+	// Print the table header
+	fmt.Printf("%-20s | %-20s | %-15s\n", "RULE / TARGET", "KNOWN AGENT", "KNOWN IP")
+	fmt.Println(strings.Repeat("-", 61))
+
+	// Print the rows
+	for _, r := range records {
+
+		// Cap strings so they don't break the table formatting
+		agent := r.Agent
+		if len(agent) > 17 {
+			agent = agent[:14] + "..."
+		}
+
+		target := r.Target
+		if len(target) > 17 {
+			target = target[:14] + "..."
+		}
+
+		fmt.Printf("%-20s | %-20s | %-15s\n", target, agent, r.IP)
+	}
+	fmt.Println("=====================")
+}
+
+func listBanned() {
+	records := peer.ConnManager.GetBanned()
+
+	fmt.Println("\n=== Banned Targets ===")
+
+	if len(records) == 0 {
+		fmt.Println("No peers are currently banned.")
+		fmt.Println("======================")
+		return
+	}
+
+	fmt.Printf("%-20s | %-20s | %-15s\n", "RULE / TARGET", "KNOWN AGENT", "KNOWN IP")
+	fmt.Println(strings.Repeat("-", 61))
+
+	for _, r := range records {
+		agent := r.Agent
+		if len(agent) > 17 {
+			agent = agent[:14] + "..."
+		}
+
+		target := r.Target
+		if len(target) > 17 {
+			target = target[:14] + "..."
+		}
+
+		fmt.Printf("%-20s | %-20s | %-15s\n", target, agent, r.IP)
+	}
+	fmt.Println("======================")
 }
 
 func listObjects(manager *core.Manager) {
