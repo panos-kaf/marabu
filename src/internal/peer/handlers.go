@@ -102,19 +102,14 @@ func (p *Peer) handleIHaveObject(msg *protocol.IHaveObject) {
 
 func (p *Peer) handleObject(msg *protocol.Object) {
 
-	result := p.Manager.ValidateObject(msg.Object, p.addr)
+	result := p.Manager.ValidateObject(msg.Object)
 
 	if result.Error != nil {
-		p.err(msg.Type, result.ErrorCode, result.Error.Error())
-		p.SendError(result.ErrorCode, result.Error.Error())
-
-		if result.MissingID != types.DUMMY_HASH {
-			BroadcastGetObject(result.MissingID)
-		}
+		p.rejectObject(msg.Object, result)
 		return
 	}
 
-	p.acceptObject(msg.Type, msg.Object, result)
+	p.acceptObject(msg.Object, result)
 }
 
 func (p *Peer) handleGetMempool() {
