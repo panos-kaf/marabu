@@ -42,40 +42,91 @@ func (m *Manager) IncrementChaintipsReceived() {
 	m.chaintipsReceived.Add(1)
 }
 
-// CommitObject safely writes the validated object to the database.
-func (m *Manager) CommitObject(obj types.Object, result ValidationResult) error {
-	// Store the raw object
+// CommitObject applies state changes (DB and Mempool) and returns a boolean
+// indicating if the object should be gossiped to the network.
+func (m *Manager) CommitObject(obj types.Object, result ValidationResult) (bool, types.ErrorCode, error) {
+
+	// store the raw object to the hard drive
 	if _, err := m.db.putObject(obj); err != nil {
-		return fmt.Errorf("failed to store object: %v", err)
+		return false, types.E_INTERNAL_ERROR, fmt.Errorf("failed to store object: %v", err)
 	}
 
-	// Apply type-specific database updates
 	switch o := obj.(type) {
 	case *types.Transaction:
-		if err := m.db.putFee(result.ObjID, result.Fee); err != nil {
-			return fmt.Errorf("error storing fee: %v", err)
-		}
-
+		return m.commitTransaction(o, result)
 	case *types.Block:
-		if result.NewUTXOSet != nil {
-			if err := m.db.putUTXO(result.ObjID, *result.NewUTXOSet); err != nil {
-				return fmt.Errorf("failed to save UTXO state: %v", err)
-			}
-		}
-		if result.IsNewTip {
-			if err := m.db.putChaintip(result.ObjID, result.NewHeight); err != nil {
-				return fmt.Errorf("failed to update chaintip: %v", err)
-			}
-		}
+		return m.commitBlock(o, result)
+	default:
+		return false, types.E_INTERNAL_ERROR, fmt.Errorf("unknown object type")
+	}
+}
 
-		// we commited the block to the database, so we can remove its transactions from the mempool
-		for _, txid := range o.Txids {
-			if err := m.db.removeMempoolEntry(txid); err != nil {
-				return fmt.Errorf("failed to remove transaction from mempool: %v", err)
-			}
+func (m *Manager) commitTransaction(tx *types.Transaction, result ValidationResult) (bool, types.ErrorCode, error) {
+	// Store the fee
+	if err := m.db.putFee(result.ObjID, result.Fee); err != nil {
+		return false, types.E_INTERNAL_ERROR, fmt.Errorf("error storing fee: %v", err)
+	}
+
+	// Check for double spends in current mempool
+	isMempoolConflict := false
+	for _, input := range tx.Inputs {
+		outpoint := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+		if m.IsInputSpent(outpoint) {
+			isMempoolConflict = true
+			break
 		}
 	}
-	return nil
+
+	// Decide if it goes into the mempool
+	if !isMempoolConflict {
+		// Ensure it belongs to our active chaintip
+		if m.IsInputInUTXO(tx) {
+			m.AddToMempool(tx, result.Fee)
+			return true, types.E_NONE, nil // Gossip!
+		} else {
+			logs.GlobalLog(fmt.Sprintf("Tx %s saved, but rejected from mempool (not on active chain).", result.ObjID))
+			return false, types.E_INVALID_TX_OUTPOINT, nil
+		}
+	} else {
+		logs.GlobalLog(fmt.Sprintf("Tx %s saved, but withheld from mempool due to conflict.", result.ObjID))
+		return false, types.E_INVALID_TX_OUTPOINT, nil
+	}
+
+	// return false, nil // Do not gossip
+}
+
+func (m *Manager) commitBlock(blk *types.Block, result ValidationResult) (bool, types.ErrorCode, error) {
+	if result.NewUTXOSet != nil {
+		if err := m.db.putUTXO(result.ObjID, *result.NewUTXOSet); err != nil {
+			return false, types.E_INTERNAL_ERROR, fmt.Errorf("failed to save UTXO state: %v", err)
+		}
+	}
+
+	// Check for Reorg / New Tip
+	var isReorg bool
+	var oldTip types.HashID
+
+	if result.IsNewTip {
+		oldTip, _, err := m.GetChaintip()
+		if err == nil && oldTip != *blk.Previd {
+			isReorg = true
+		}
+
+		if err := m.db.putChaintip(result.ObjID, result.NewHeight); err != nil {
+			return false, types.E_INTERNAL_ERROR, fmt.Errorf("failed to update chaintip: %v", err)
+		}
+	}
+
+	// Clean up the mempool
+	if isReorg {
+		m.HandleReorg(oldTip, result.ObjID)
+	} else {
+		for _, txid := range blk.Txids {
+			m.RemoveFromMempool(txid)
+		}
+	}
+
+	return true, types.E_NONE, nil // Always gossip valid blocks
 }
 
 func (m *Manager) ExistsObject(id types.HashID) (bool, error) {
@@ -114,6 +165,28 @@ func (m *Manager) GetUTXO(id types.HashID) (*UTXOSet, error) {
 	return &UTXOSet, nil
 }
 
+// IsInputInUTXO checks if a transaction's inputs exist in the active UTXOSet
+func (m *Manager) IsInputInUTXO(tx *types.Transaction) bool {
+	tip, _, err := m.GetChaintip()
+	if err != nil {
+		return false // No tip yet. nothing is spendable
+	}
+
+	activeUTXOs, err := m.GetUTXO(tip)
+	if err != nil {
+		return false
+	}
+
+	for _, input := range tx.Inputs {
+		key := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+		if _, exists := activeUTXOs.UTXOs[key]; !exists {
+			return false // Input is not in the longest chain
+		}
+	}
+
+	return true
+}
+
 // GetChaintip allows the network layer to fetch the current tip to gossip
 func (m *Manager) GetChaintip() (types.HashID, uint64, error) {
 	chaintip, height, err := m.db.getChaintip()
@@ -136,9 +209,9 @@ func (m *Manager) InitializeMempool() {
 	for _, entry := range savedMempool {
 
 		// This guarantees the UTXOs are still unspent on the longest chain.
-		_, errCode, err := m.ValidateTransaction(entry.Tx)
+		result := m.ValidateTransaction(entry.Tx)
 
-		if err != nil || errCode != types.E_NONE {
+		if result.Error != nil || result.ErrorCode != types.E_NONE || !m.IsInputInUTXO(entry.Tx) {
 			m.db.removeMempoolEntry(entry.TxID)
 		} else {
 			m.db.mempoolMutex.Lock()
@@ -186,6 +259,10 @@ func (m *Manager) IsInputSpent(outpoint OutpointKey) bool {
 	m.db.mempoolMutex.RUnlock()
 
 	return isPendingSpend
+}
+
+func (m *Manager) AddPendingBlock(peer string, missingID types.HashID, block *types.Block) {
+	m.db.addPendingBlock(peer, missingID, block)
 }
 
 func (m *Manager) IsNeededForPendingBlock(id types.HashID) bool {
@@ -283,9 +360,9 @@ func (m *Manager) HandleReorg(oldTip types.HashID, newTip types.HashID) {
 			if err == nil {
 				if tx, ok := txObj.(*types.Transaction); ok {
 
-					fee, _, _ := m.ValidateTransaction(tx)
+					result := m.ValidateTransaction(tx)
 					// Add it to the DB (we don't care if it's invalid right now, the sweep will catch it)
-					m.AddToMempool(tx, fee)
+					m.AddToMempool(tx, result.Fee)
 				}
 			}
 		}
