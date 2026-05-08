@@ -39,7 +39,7 @@ func (p *Peer) rejectObject(obj types.Object, result core.ValidationResult) {
 			p.Manager.AddPendingBlock(p.addr, result.MissingID, blk)
 		}
 
-		BroadcastGetObject(result.MissingID)
+		p.SendGetObject(result.MissingID)
 		return
 	}
 
@@ -67,8 +67,10 @@ func (p *Peer) resolvePendingBlocks(msgType types.MessageType, resolvedObjID typ
 			// Still missing objects (e.g., the block was missing multiple txs)
 			// We DO NOT send an error here. We just ask for the next missing piece.
 			p.log(msgType, types.E_NONE, fmt.Sprintf("Pending block still missing objects. Asking for %s", result.MissingID))
+
 			if result.MissingID != types.DUMMY_HASH {
-				BroadcastGetObject(result.MissingID)
+				p.Manager.AddPendingBlock(p.addr, result.MissingID, blk)
+				p.SendGetObject(result.MissingID)
 			}
 
 		} else {
