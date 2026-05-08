@@ -79,7 +79,15 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) ValidationResult {
 		outpoint := input.Outpoint
 		idx := int(*outpoint.Index)
 
+		// Check for duplicate outpoints
 		key := OutpointKey{Txid: outpoint.Txid, Index: idx}
+		if outpoints[key] {
+			result.ErrorCode = types.E_INVALID_TX_OUTPOINT
+			result.Error = fmt.Errorf("Multiple inputs have the same outpoint.")
+			return result
+		}
+		outpoints[key] = true
+
 		if m.IsInputSpent(key) {
 			result.ErrorCode = types.E_INVALID_TX_OUTPOINT
 			result.Error = fmt.Errorf("Input %d is already being spent by another transaction in the mempool", i)
@@ -115,14 +123,6 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) ValidationResult {
 			result.Error = fmt.Errorf("Invalid output index")
 			return result
 		}
-
-		// Check for duplicate outpoints
-		if outpoints[key] {
-			result.ErrorCode = types.E_INVALID_TX_OUTPOINT
-			result.Error = fmt.Errorf("Multiple inputs have the same outpoint.")
-			return result
-		}
-		outpoints[key] = true
 
 		output := outputs[idx]
 		sumInputs.Add(sumInputs, (*big.Int)(output.Value))
