@@ -194,7 +194,9 @@ func (p *Peer) handleMessage(raw string) {
 	}
 }
 
-func StartServer(port int, Manager *core.Manager) error {
+func StartServer(Manager *core.Manager) error {
+
+	port := Manager.Port()
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)

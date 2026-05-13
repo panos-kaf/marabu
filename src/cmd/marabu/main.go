@@ -1,17 +1,31 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"marabu/internal/bootstrap"
 	"marabu/internal/core"
 	"marabu/internal/logs"
 	"marabu/internal/peer"
+	"marabu/internal/types"
 	"marabu/internal/ui"
 	"os"
 	"path/filepath"
 )
 
 func main() {
+
+	var config core.NodeConfig
+
+	var agentStr string
+
+	flag.IntVar(&config.ServerPort, "port", 18018, "The port to listen on")
+	flag.IntVar(&config.ServerPort, "p", 18018, "Alias for --port")
+
+	flag.StringVar(&agentStr, "agent", "marabobos", "Agent name")
+	flag.StringVar(&agentStr, "a", "marabobos", "Alias for --agent")
+
+	flag.Parse()
 
 	logFile := logs.InitLogs()
 	defer logFile.Close()
@@ -24,9 +38,11 @@ func main() {
 	}
 	defer peersFile.Close()
 
-	DB_PATH := filepath.Join(".", "db")
+	config.DBPath = filepath.Join(".", "db")
 
-	Manager := core.NewManager(DB_PATH)
+	config.AgentName = types.BuString(agentStr)
+
+	Manager := core.NewManager(config)
 
 	Manager.InitializeMempool()
 
@@ -34,7 +50,7 @@ func main() {
 
 	go Manager.SyncNodeState(peer.BroadcastGetMempool)
 
-	go peer.StartServer(18018, Manager)
+	go peer.StartServer(Manager)
 
 	bootstrap.StartNode(Manager)
 	ui.Start(Manager)

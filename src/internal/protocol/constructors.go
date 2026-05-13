@@ -6,17 +6,16 @@ import (
 	"marabu/internal/types"
 )
 
+var Version = types.Version("0.10.0")
+
 // -- Constructor functions for messages --
 
-func MakeHello() (string, error) {
-
-	version := types.Version("0.10.0")
-	agent := types.BuString("marabobos")
+func MakeHello(agent *types.BuString) (string, error) {
 
 	return serialization.CanonicalizeMessage(&Hello{
-		Type:      types.MSG_HELLO,
-		Version: version,
-		Agent:     &agent,
+		Type:    types.MSG_HELLO,
+		Version: Version,
+		Agent:   agent,
 	})
 }
 
@@ -36,7 +35,7 @@ func MakeGetPeers() (string, error) {
 
 func MakePeers(peers types.Peers) (string, error) {
 	return serialization.CanonicalizeMessage(&Peers{
-		Type:    types.MSG_PEERS,
+		Type:  types.MSG_PEERS,
 		Peers: peers,
 	})
 }

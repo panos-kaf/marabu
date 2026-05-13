@@ -11,27 +11,48 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
+type NodeConfig struct {
+	ServerPort int
+	AgentName  types.BuString
+	DBPath     string
+	StudentIDs types.BuStrings
+}
+
 type Manager struct {
 	db *database
 
 	isSynced          atomic.Bool
 	chaintipsReceived atomic.Int32
+
+	config NodeConfig
 }
 
 var ErrNotFound = errors.New("object not found in database")
 
-func NewManager(dbPath string) *Manager {
-	db, err := newDatabase(dbPath)
+func NewManager(config NodeConfig) *Manager {
+	db, err := newDatabase(config.DBPath)
 	if err != nil {
 		panic(fmt.Errorf("failed to create database: %v", err))
 	}
 
-	m := &Manager{db: db}
+	m := &Manager{db: db, config: config}
 
 	m.isSynced.Store(false)
 
 	return m
 
+}
+
+func (m *Manager) Port() int {
+	return m.config.ServerPort
+}
+
+func (m *Manager) Agent() types.BuString {
+	return m.config.AgentName
+}
+
+func (m *Manager) StudentIDs() types.BuStrings {
+	return m.config.StudentIDs
 }
 
 func (m *Manager) IsSynced() bool {
@@ -131,6 +152,11 @@ func (m *Manager) commitBlock(blk *types.Block, result ValidationResult) (bool, 
 
 func (m *Manager) ExistsObject(id types.HashID) (bool, error) {
 	return m.db.existsObject(id)
+}
+
+func (m *Manager) StoreObject(object types.Object) error {
+	_, err := m.db.putObject(object)
+	return err
 }
 
 // ExistsChaintip lets the network layer know if we have a chaintip yet
@@ -250,6 +276,10 @@ func (m *Manager) ExistsInMempool(txid types.HashID) (bool, error) {
 
 func (m *Manager) GetMempoolEntries() []MempoolEntry {
 	return m.db.getMempoolEntries()
+}
+
+func (m *Manager) GetMempoolTxids() []types.HashID {
+	return m.db.getMempoolTxids()
 }
 
 func (m *Manager) IsInputSpent(outpoint OutpointKey) bool {

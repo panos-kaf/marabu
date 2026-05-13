@@ -78,7 +78,10 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 // -- Top Level Send Functions for each message type --
 
 func (p *Peer) SendHello() error {
-	msg, err := protocol.MakeHello()
+
+	agent := types.BuString(p.Manager.Agent())
+
+	msg, err := protocol.MakeHello(&agent)
 	return p.SendMessage(types.MSG_HELLO, types.E_NONE, msg, err)
 }
 
