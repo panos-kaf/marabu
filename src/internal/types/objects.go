@@ -75,7 +75,7 @@ func (b Block) ObjectType() ObjectType {
 
 // -- object constructors --
 
-func makeTxInput(txid HashID, index BuInt, sig Signature) TxInput {
+func MakeTxInput(txid HashID, index BuInt, sig Signature) TxInput {
 	return TxInput{
 		Outpoint: Outpoint{
 			Txid:  txid,
@@ -85,14 +85,14 @@ func makeTxInput(txid HashID, index BuInt, sig Signature) TxInput {
 	}
 }
 
-func makeTxOutput(pubkey HashID, value Picabu) TxOutput {
+func MakeTxOutput(pubkey HashID, value Picabu) TxOutput {
 	return TxOutput{
 		Pubkey: pubkey,
 		Value:  &value,
 	}
 }
 
-func makeTransaction(inputs TxInputs, outputs TxOutputs) Transaction {
+func MakeTransaction(inputs TxInputs, outputs TxOutputs) Transaction {
 	return Transaction{
 		Type:    OBJ_TRANSACTION,
 		Inputs:  inputs,
@@ -100,7 +100,7 @@ func makeTransaction(inputs TxInputs, outputs TxOutputs) Transaction {
 	}
 }
 
-func makeCoinbaseTransaction(height BuInt, outputs TxOutputs) CoinbaseTransaction {
+func MakeCoinbaseTransaction(height BuInt, outputs TxOutputs) CoinbaseTransaction {
 	return CoinbaseTransaction{
 		Type:    OBJ_TRANSACTION,
 		Height:  &height,
@@ -108,7 +108,7 @@ func makeCoinbaseTransaction(height BuInt, outputs TxOutputs) CoinbaseTransactio
 	}
 }
 
-func makeBlock(T HashID, created BuInt, miner *BuString, nonce HashID, note *BuString, previd *HashID, studentids *BuStrings, txids HashIDs) Block {
+func MakeBlock(T HashID, created BuInt, miner *BuString, nonce HashID, note *BuString, previd *HashID, studentids *BuStrings, txids HashIDs) Block {
 	return Block{
 		Type:       OBJ_BLOCK,
 		T:          T,
