@@ -394,6 +394,17 @@ func (d *database) getMempoolEntries() []MempoolEntry {
 	return entries
 }
 
+func (d *database) getMempoolTxids() types.HashIDs {
+	d.mempoolMutex.RLock()
+	defer d.mempoolMutex.RUnlock()
+
+	var txids types.HashIDs
+	for txid := range d.mempool {
+		txids = append(txids, txid)
+	}
+	return txids
+}
+
 func (d *database) loadMempool() ([]MempoolEntry, error) {
 
 	var mempool []MempoolEntry
