@@ -51,6 +51,9 @@ func exchangeObject(objectID types.HashID, objectMsg string, conn net.Conn, resp
 }
 
 func main() {
+
+	agent := types.BuString("objectSimple-test-client")
+
 	serverAddr := "localhost:18018" // Change to your server address
 	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
@@ -60,7 +63,7 @@ func main() {
 	defer conn.Close()
 
 	// 0. Greet the server
-	helloMsg, _ := protocol.MakeHello()
+	helloMsg, _ := protocol.MakeHello(&agent)
 	send(conn, helloMsg)
 	fmt.Println("Sent hello")
 

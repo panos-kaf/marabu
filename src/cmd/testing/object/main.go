@@ -93,7 +93,10 @@ func waitForAny(p *Peer, expected ...string) string {
 --------------------------*/
 
 func handshake(p *Peer) {
-	p.send(must(protocol.MakeHello()))
+
+	agent := types.BuString("object-test-client")
+
+	p.send(must(protocol.MakeHello(&agent)))
 
 	seenHello := false
 	seenGetPeers := false
