@@ -61,3 +61,8 @@ func BlockReward() Picabu {
 func BlockRewardBigInt() *big.Int {
 	return new(big.Int).SetUint64(BLOCK_REWARD_UINT64)
 }
+
+func (p Picabu) Add(other Picabu) Picabu {
+	sum := new(big.Int).Add((*big.Int)(&p), (*big.Int)(&other))
+	return Picabu(*sum)
+}
