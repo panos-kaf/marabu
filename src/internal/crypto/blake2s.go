@@ -42,6 +42,21 @@ func HashObject(o types.Object) (string, error) {
 	return hash, nil
 }
 
+func HashObjectBigInt(o types.Object) (*big.Int, error) {
+	hashStr, err := HashObject(o)
+	if err != nil {
+		return nil, err
+	}
+
+	hashInt := new(big.Int)
+	_, ok := hashInt.SetString(hashStr, 16)
+	if !ok {
+		return nil, fmt.Errorf("Error parsing hash as hex: %s", hashStr)
+	}
+
+	return hashInt, nil
+}
+
 func VerifyPoW(blockid string) (bool, error) {
 
 	hashInt := new(big.Int)
