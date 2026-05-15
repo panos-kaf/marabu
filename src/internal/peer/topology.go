@@ -23,10 +23,16 @@ func StartTopologyManager(Manager *core.Manager) {
 	replenishOutbound(Manager)
 
 	// Drop one peer every 5 mins
-	churnTicker := time.NewTicker(5 * time.Minute)
+	churnTicker := time.NewTicker(20 * time.Minute)
 
 	// Look for missing peers every 10 seconds
 	replenishTicker := time.NewTicker(10 * time.Second)
+
+	// get peers and chaintip heartbeat
+	gossipTicker := time.NewTicker(60 * time.Second)
+
+	// sync
+	syncStallTicker := time.NewTicker(10 * time.Second)
 
 	for {
 		select {
@@ -34,6 +40,19 @@ func StartTopologyManager(Manager *core.Manager) {
 			churnRandomPeer()
 		case <-replenishTicker.C:
 			replenishOutbound(Manager)
+		case <-gossipTicker.C:
+			BroadcastGetPeers()
+			BroadcastGetChainTip()
+		case <-syncStallTicker.C:
+			missingHashes := Manager.GetMissingDependencies()
+
+			if len(missingHashes) > 0 {
+				globalLog(fmt.Sprintf("Watchdog: Sync stalled. Re-requesting %d missing parent blocks from network...", len(missingHashes)))
+
+				for _, hash := range missingHashes {
+					BroadcastGetObject(hash)
+				}
+			}
 		}
 	}
 }
