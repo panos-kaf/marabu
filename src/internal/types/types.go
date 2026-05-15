@@ -16,6 +16,7 @@ type (
 	Peers       []Peer
 	HashID      string // 32byte (64-character) hex string
 	HashIDs     []HashID
+	Nonce       string // 32byte 0-padded hex string
 	Signature   string // 64byte (128-character) hex string
 
 	Picabu big.Int
