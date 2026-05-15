@@ -33,7 +33,7 @@ func (p *Peer) handleHello(msg *protocol.Hello) {
 }
 
 func (p *Peer) handleError(msg *protocol.Error) {
-	p.log(msg.Type, msg.Name, "peer: "+p.addr+", description: "+string(msg.Description))
+	p.log(msg.Type, msg.Name, "peer: "+p.Name()+", description: "+string(msg.Description))
 }
 
 func (p *Peer) handleGetPeers() {
@@ -47,7 +47,7 @@ func (p *Peer) handleGetPeers() {
 }
 
 func (p *Peer) handlePeers(msg *protocol.Peers) {
-	p.log(types.MSG_PEERS, types.E_NONE, "Peer "+p.addr+" sent "+strconv.Itoa(len(msg.Peers))+" peers")
+	p.log(types.MSG_PEERS, types.E_NONE, p.Name()+" sent "+strconv.Itoa(len(msg.Peers))+" peers")
 	discovery.AppendPeers(msg.Peers, p.addr)
 }
 
@@ -55,7 +55,7 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 	ID := msg.ObjectID
 	mtype := msg.Type
 
-	p.log(mtype, types.E_NONE, "Peer: "+p.addr+" requested object: "+string(ID))
+	p.log(mtype, types.E_NONE, p.Name()+" requested object: "+string(ID))
 
 	obj, err := p.Manager.GetObject(ID)
 
@@ -82,7 +82,7 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 func (p *Peer) handleIHaveObject(msg *protocol.IHaveObject) {
 
 	ID := msg.ObjectID
-	p.log(msg.Type, types.E_NONE, "Peer: "+p.addr+" has object with ID: "+string(ID))
+	p.log(msg.Type, types.E_NONE, p.Name()+" has object with ID: "+string(ID))
 
 	exists, e := p.Manager.ExistsObject(ID)
 	if e != nil {
@@ -92,7 +92,7 @@ func (p *Peer) handleIHaveObject(msg *protocol.IHaveObject) {
 	if exists {
 		p.log(msg.Type, types.E_NONE, "We already have object "+string(ID))
 	} else {
-		p.log(msg.Type, types.E_NONE, "We do not have object "+string(ID)+", requesting it from peer "+p.addr)
+		p.log(msg.Type, types.E_NONE, "We do not have object "+string(ID)+", requesting it from "+p.Name())
 		err := p.SendGetObject(ID)
 		if err != nil {
 			p.err(msg.Type, types.E_NONE, "Error sending getobject: "+err.Error())
@@ -104,6 +104,13 @@ func (p *Peer) handleObject(msg *protocol.Object) {
 
 	result := p.Manager.ValidateObject(msg.Object)
 
+	if result.ErrorCode == types.E_INVALID_BLOCK_POW {
+		p.SendError(types.E_INVALID_BLOCK_POW, "Invalid proof of work. You have been banned.")
+		ConnManager.BanPeer(p.host)
+		p.Disconnect()
+		return
+	}
+
 	if result.Error != nil {
 		p.rejectObject(msg.Object, result)
 		return
@@ -113,7 +120,15 @@ func (p *Peer) handleObject(msg *protocol.Object) {
 }
 
 func (p *Peer) handleGetMempool() {
-	p.log(types.MSG_GETMEMPOOL, types.E_NONE, "not handled yet")
+
+	mempool := p.Manager.GetMempoolTxids()
+
+	// If mempool is nil, send an empty array instead of null to avoid JSON parsing issues on the peer side
+	if mempool == nil {
+		mempool = make([]types.HashID, 0)
+	}
+
+	p.SendMempool(mempool)
 }
 
 func (p *Peer) handleMempool(msg *protocol.Mempool) {
@@ -134,7 +149,7 @@ func (p *Peer) handleMempool(msg *protocol.Mempool) {
 
 func (p *Peer) handleGetChainTip() {
 
-	p.log(types.MSG_GETCHAINTIP, types.E_NONE, "Peer "+p.addr+" requested chain tip")
+	p.log(types.MSG_GETCHAINTIP, types.E_NONE, p.Name()+" requested chain tip")
 
 	tip, _, err := p.Manager.GetChaintip()
 	if err != nil {
@@ -150,7 +165,7 @@ func (p *Peer) handleGetChainTip() {
 		return
 	}
 
-	p.log(types.MSG_GETCHAINTIP, types.E_NONE, "Sending chain tip "+string(tip)+" to peer "+p.addr)
+	p.log(types.MSG_GETCHAINTIP, types.E_NONE, "Sending chain tip "+string(tip)+" to "+p.Name())
 
 	err = p.SendChainTip(tip)
 	if err != nil {
@@ -160,9 +175,12 @@ func (p *Peer) handleGetChainTip() {
 
 func (p *Peer) handleChainTip(msg *protocol.ChainTip) {
 
-	p.log(msg.Type, types.E_NONE, "Peer "+p.addr+" sent chain tip: "+string(msg.BlockID))
+	p.log(msg.Type, types.E_NONE, p.Name()+" sent chain tip: "+string(msg.BlockID))
 
-	p.Manager.IncrementChaintipsReceived()
+	if !p.sentChainTip {
+		p.sentChainTip = true
+		p.Manager.IncrementChaintipsReceived()
+	}
 
 	exists, e := p.Manager.ExistsObject(msg.BlockID)
 	if e != nil {
@@ -172,7 +190,7 @@ func (p *Peer) handleChainTip(msg *protocol.ChainTip) {
 	if exists {
 		p.log(msg.Type, types.E_NONE, "We already have chain tip "+string(msg.BlockID))
 	} else {
-		p.log(msg.Type, types.E_NONE, "We do not have chain tip "+string(msg.BlockID)+", requesting it from peer "+p.addr)
+		p.log(msg.Type, types.E_NONE, "We do not have chain tip "+string(msg.BlockID)+", requesting it from "+p.Name())
 		err := p.SendGetObject(msg.BlockID)
 		if err != nil {
 			p.err(msg.Type, types.E_NONE, "Error sending getobject for chain tip: "+err.Error())
