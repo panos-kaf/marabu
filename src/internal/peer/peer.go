@@ -1,8 +1,10 @@
 package peer
 
 import (
-	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"marabu/internal/core"
 	"marabu/internal/protocol"
 	"marabu/internal/types"
@@ -30,6 +32,7 @@ type Peer struct {
 	origin            types.Origin
 	isPersistent      bool
 	Manager           *core.Manager
+	sentChainTip      bool
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
@@ -49,6 +52,7 @@ func NewPeer(conn net.Conn,
 		Manager:      Manager,
 		isPersistent: isPersistent,
 		done:         make(chan struct{}),
+		sentChainTip: false,
 	}
 
 	p.host, _, _ = net.SplitHostPort(addr)
@@ -62,6 +66,14 @@ func NewPeer(conn net.Conn,
 	go p.initializeSocket()
 
 	return p, nil
+}
+
+// Name returns the peer's agent name if available, otherwise it falls back to the address.
+func (p *Peer) Name() string {
+	if p.agent != "" && p.agent != "unknown" {
+		return p.agent
+	}
+	return p.addr
 }
 
 // Getters
@@ -98,15 +110,40 @@ func NotifyPeerUnfindable(peerAddr string, txid types.HashID) {
 // initializeSocket starts a goroutine to read messages from the peer's connection.
 // It continuously reads lines from the connection, and for each line, it calls handleMessage.
 // On error it disconnects and removes the peer from the connManager peers map.
+// func (p *Peer) initializeSocket() {
+// 	reader := bufio.NewReader(p.conn)
+// 	for {
+// 		line, err := reader.ReadString('\n')
+// 		if err != nil {
+// 			p.Disconnect()
+// 			return
+// 		}
+// 		p.handleMessage(line)
+// 	}
+// }
+
 func (p *Peer) initializeSocket() {
-	reader := bufio.NewReader(p.conn)
+	decoder := json.NewDecoder(p.conn)
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
+		var rawMsg json.RawMessage
+
+		if err := decoder.Decode(&rawMsg); err != nil {
+
+			if !errors.Is(err, io.EOF) {
+				var netErr net.Error
+				if errors.As(err, &netErr) {
+					p.errInfo(fmt.Sprintf("Network error with peer %s: %v", p.Name(), err.Error()))
+
+				} else {
+					p.errInfo(fmt.Sprintf("%s sent invalid JSON or corrupted stream: %v", p.Name(), err.Error()))
+				}
+			}
+
 			p.Disconnect()
-			return
+			break
 		}
-		p.handleMessage(line)
+
+		p.handleMessage(string(rawMsg))
 	}
 }
 
@@ -123,7 +160,7 @@ func (p *Peer) Disconnect() {
 
 	p.conn.Close()
 
-	p.logInfo("Peer at " + p.addr + " disconnected")
+	p.logInfo(p.Name() + " disconnected")
 
 }
 
