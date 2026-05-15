@@ -27,6 +27,9 @@ func (p *Peer) acceptObject(obj types.Object, result core.ValidationResult) {
 		BroadcastIHaveObject(result.ObjID)
 	}
 
+	// We received a valid object, se we reset the timeout for pending blocks
+	p.Manager.ResetSyncTimer()
+
 	p.resolvePendingBlocks(types.MSG_OBJECT, result.ObjID)
 }
 
@@ -34,6 +37,9 @@ func (p *Peer) rejectObject(obj types.Object, result core.ValidationResult) {
 	if result.ErrorCode == types.E_UNKNOWN_OBJECT && result.MissingID != types.DUMMY_HASH {
 
 		p.log(types.MSG_OBJECT, types.E_NONE, fmt.Sprintf("Missing objects. Pausing block and requesting %s", result.MissingID))
+
+		// We received an object with missing dependencies. Reset timer for pending blocks and ask for the missing object.
+		p.Manager.ResetSyncTimer()
 
 		if blk, ok := obj.(*types.Block); ok {
 			p.Manager.AddPendingBlock(p.addr, result.MissingID, blk)
