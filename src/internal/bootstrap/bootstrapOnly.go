@@ -3,13 +3,13 @@
 package bootstrap
 
 import (
+	"fmt"
 	"marabu/internal/core"
 	"marabu/internal/discovery"
 	"marabu/internal/logs"
 	"marabu/internal/peer"
 	"marabu/internal/types"
 
-	"fmt"
 	"net"
 	"strconv"
 )
@@ -25,7 +25,7 @@ func StartNode(Manager *core.Manager) {
 			port, _ := strconv.Atoi(portStr)
 			err := peer.StartClient(host, port, true, Manager)
 			if err != nil {
-				fmt.Printf("Error connecting to peer %s: %v\n", p, err)
+				logs.GlobalLog(fmt.Sprintf("Error connecting to peer %s: %v\n", p, err))
 			}
 		}(p)
 	}
