@@ -2,7 +2,9 @@ package crypto
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
+	"os"
 )
 
 // Sign signs the given message using the provided Ed25519 private key and returns the signature as a hexadecimal string.
@@ -35,4 +37,32 @@ func StringToPubkey(hexStr string) (ed25519.PublicKey, error) {
 		return nil, err
 	}
 	return ed25519.PublicKey(pubkeyBytes), nil
+}
+
+func LoadOrGenerateKey(filepath string) (ed25519.PrivateKey, error) {
+
+	data, err := os.ReadFile(filepath)
+	if err == nil {
+		// Decode the hex string back into bytes
+		privBytes, err := hex.DecodeString(string(data))
+		if err != nil {
+			return nil, err
+		}
+		return ed25519.PrivateKey(privBytes), nil
+	}
+
+	// If it doesn't exist, generate a new one
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save it to disk as a hex string
+	hexPriv := hex.EncodeToString(priv)
+	err = os.WriteFile(filepath, []byte(hexPriv), 0600)
+	if err != nil {
+		return nil, err
+	}
+
+	return priv, nil
 }
