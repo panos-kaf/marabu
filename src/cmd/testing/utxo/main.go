@@ -102,7 +102,7 @@ func main() {
 	blk1 := types.Block{
 		Type:    types.OBJ_BLOCK,
 		T:       dummyTarget,
-		Nonce:   dummyTarget,
+		Nonce:   types.Nonce(dummyTarget),
 		Created: types.BuInt(time.Now().Unix()),
 		Previd:  prevID,
 		Txids:   types.HashIDs{types.HashID(cb1IDstr)},
@@ -133,7 +133,7 @@ func main() {
 	cbID := types.HashID(cbValidIDstr)
 
 	blk2 := types.Block{
-		Type: types.OBJ_BLOCK, T: dummyTarget, Nonce: dummyTarget, Previd: prevID, Created: types.BuInt(time.Now().Unix()),
+		Type: types.OBJ_BLOCK, T: dummyTarget, Nonce: types.Nonce(dummyTarget), Previd: prevID, Created: types.BuInt(time.Now().Unix()),
 		Txids: types.HashIDs{cbID, cbID}, // Two coinbases!
 	}
 
@@ -165,7 +165,7 @@ func main() {
 	illegalTxIDstr, _ := crypto.HashObject(illegalTx)
 
 	blk3 := types.Block{
-		Type: types.OBJ_BLOCK, T: dummyTarget, Nonce: dummyTarget, Previd: prevID, Created: types.BuInt(time.Now().Unix()),
+		Type: types.OBJ_BLOCK, T: dummyTarget, Nonce: types.Nonce(dummyTarget), Previd: prevID, Created: types.BuInt(time.Now().Unix()),
 		Txids: types.HashIDs{cbID, types.HashID(illegalTxIDstr)},
 	}
 
@@ -190,7 +190,7 @@ func main() {
 	blkFakeTx := types.Block{
 		Type:    types.OBJ_BLOCK,
 		T:       dummyTarget,
-		Nonce:   dummyTarget,
+		Nonce:   types.Nonce(dummyTarget),
 		Created: types.BuInt(time.Now().Unix()),
 		Previd:  prevID,
 		Txids:   types.HashIDs{fakeTxID},
