@@ -138,7 +138,7 @@ func AppendPeers(peers types.Peers, source string) {
 			if _, exists := KnownPeers[peer]; !exists {
 				newPeers++
 				KnownPeers[peer] = PeerRecord{Source: source, Agent: "unknown"}
-				logs.GlobalLog(fmt.Sprintf("Discovered new peer: %s from %s", peer, source))
+				// logs.GlobalLog(fmt.Sprintf("Discovered new peer: %s from %s", peer, source))
 			}
 		}
 	}
