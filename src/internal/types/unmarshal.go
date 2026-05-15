@@ -3,7 +3,6 @@ package types
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"regexp"
@@ -16,7 +15,7 @@ var versionRegex = regexp.MustCompile(`^0\.10\.[0-9]+$`)
 const (
 	maxArrLen      = 1000
 	maxStrLen      = 1000
-	maxBuStringLen = 128
+	maxBuStringLen = 1024
 
 	// Student IDs
 	maxBuStringsLen = 10
@@ -136,6 +135,31 @@ func (sig *Signature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (n *Nonce) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	// if len(s) < 64 {
+	// 	s = strings.Repeat("0", 64-len(s)) + s
+	// }
+
+	if len(s) > 64 {
+		return fmt.Errorf("nonce exceeds maximum length of 64 characters, got %d", len(s))
+	}
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return fmt.Errorf("invalid hex character in nonce: %c", c)
+		}
+	}
+
+	*n = Nonce(s)
+	return nil
+}
+
 func (o *TxOutput) UnmarshalJSON(data []byte) error {
 	type Alias TxOutput
 	aux := &struct {
@@ -231,8 +255,11 @@ func (s *BuString) UnmarshalJSON(data []byte) error {
 	}
 
 	for i := 0; i < len(str); i++ {
-		if str[i] < 32 || str[i] > 126 {
-			return fmt.Errorf("non-printable ascii char: %X", str[i])
+		c := str[i]
+
+		// testing: allow \t \n \r
+		if (c < 32 || c > 126) && c != 10 && c != 13 && c != 9 {
+			return fmt.Errorf("non-printable ascii char with hexcode: 0x%X", str[i])
 		}
 	}
 
@@ -293,65 +320,52 @@ func (arr *Peers) UnmarshalJSON(data []byte) error {
 // Validate and sanitize peer address, returning PEER_INVALID if invalid
 func sanitizePeer(peer string) Peer {
 	peer = strings.TrimSpace(peer)
-	lastColon := strings.LastIndex(peer, ":")
-	if lastColon == -1 {
+
+	host, portStr, err := net.SplitHostPort(peer)
+	if err != nil {
+		// log.Printf("Rejected peer %s: invalid host:port format", peer)
 		return PEER_INVALID
 	}
-	portStr := peer[lastColon+1:]
+
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
+		// log.Printf("Rejected peer %s: invalid port", peer)
 		return PEER_INVALID
 	}
-	host := peer[:lastColon]
 
-	isv6 := false
-	// Remove brackets for IPv6
+	// Remove IPv6 brackets if present
 	ipStr := host
 	if strings.HasPrefix(ipStr, "[") && strings.HasSuffix(ipStr, "]") {
 		ipStr = ipStr[1 : len(ipStr)-1]
-		isv6 = true
 	}
+
 	ip := net.ParseIP(ipStr)
 
+	// IP address validation
 	if ip != nil {
-		// IPv4
-		if ip.To4() != nil && !isv6 {
-			if strings.HasPrefix(ipStr, "127.") || strings.HasPrefix(ipStr, "0.") ||
-				strings.HasPrefix(ipStr, "192.168.") || strings.HasPrefix(ipStr, "10.") {
-				log.Printf("Rejected peer %s: IPv4 address is loopback or private", peer)
-				return PEER_INVALID
-			}
-			octets := strings.Split(ipStr, ".")
-			if len(octets) != 4 {
-				log.Printf("Rejected peer %s: invalid IPv4 format", peer)
-				return PEER_INVALID
-			}
-			if strings.HasPrefix(ipStr, "172.") {
-				second, err := strconv.Atoi(octets[1])
-				if err != nil || second < 16 || second > 31 {
-					log.Printf("Rejected peer %s: invalid IPv4 octet", peer)
-					return PEER_INVALID
-				}
-			}
-			return Peer(peer)
+		if ip.IsLoopback() ||
+			ip.IsPrivate() ||
+			ip.IsUnspecified() ||
+			ip.IsMulticast() ||
+			ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() {
+
+			// log.Printf("Rejected peer %s: invalid/private IP address", peer)
+			return PEER_INVALID
 		}
-		// IPv6
-		if ip.To16() != nil && ip.To4() == nil {
-			if ipStr == "::1" || strings.HasPrefix(ipStr, "fe80:") || strings.HasPrefix(ipStr, "fc00:") {
-				log.Printf("Rejected peer %s: IPv6 address is loopback or link-local", peer)
-				return PEER_INVALID
-			}
-			return Peer(peer)
-		}
+
+		return Peer(net.JoinHostPort(ip.String(), portStr))
 	}
 
-	// Domain check (strict format, no DNS lookup)
-	if !isv6 {
-		domain := regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
-		if domain.MatchString(host) && host != "localhost" {
-			return Peer(peer)
-		}
+	// Domain validation (no DNS lookup)
+	domainRegex := regexp.MustCompile(
+		`^(?i)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$`,
+	)
+
+	if domainRegex.MatchString(host) && !strings.EqualFold(host, "localhost") {
+		return Peer(net.JoinHostPort(host, portStr))
 	}
 
+	// log.Printf("Rejected peer %s: invalid hostname or address", peer)
 	return PEER_INVALID
 }
