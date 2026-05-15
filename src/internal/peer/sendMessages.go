@@ -147,11 +147,13 @@ func (p *Peer) Greet() {
 // -- Top level broadcast functions for each message type --
 
 func BroadcastHello() {
-	Broadcast(types.MSG_HELLO, types.E_NONE, "Broadcasting hello message to all peers", nil)
+	msg, err := protocol.MakeHello(nil)
+	Broadcast(types.MSG_HELLO, types.E_NONE, msg, err)
 }
 
 func BroadcastGetPeers() {
-	Broadcast(types.MSG_GETPEERS, types.E_NONE, "Broadcasting getpeers message to all peers", nil)
+	msg, err := protocol.MakeGetPeers()
+	Broadcast(types.MSG_GETPEERS, types.E_NONE, msg, err)
 }
 
 func BroadcastPeers(peers types.Peers) {
