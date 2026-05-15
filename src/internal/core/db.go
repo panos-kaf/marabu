@@ -26,7 +26,7 @@ type database struct {
 	db *leveldb.DB
 
 	pendingFinds  map[types.HashID][]chan types.Object
-	pendingMutex  sync.Mutex
+	pendingMutex  sync.RWMutex
 	pendingBlocks map[types.HashID][]PendingBlock
 
 	mempool            map[types.HashID]MempoolEntry
@@ -466,8 +466,8 @@ func (d *database) checkPendingBlocks() []struct {
 	Block *types.Block
 	Txid  types.HashID
 } {
-	d.pendingMutex.Lock()
-	defer d.pendingMutex.Unlock()
+	d.pendingMutex.RLock()
+	defer d.pendingMutex.RUnlock()
 	now := time.Now()
 	var expired []struct {
 		Peer  string
@@ -475,7 +475,7 @@ func (d *database) checkPendingBlocks() []struct {
 		Txid  types.HashID
 	}
 
-	timeout := 2 * time.Second
+	timeout := 5 * time.Minute
 
 	for txid, blocks := range d.pendingBlocks {
 		var stillPending []PendingBlock
