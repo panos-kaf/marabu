@@ -53,7 +53,7 @@ type (
 		T          HashID     `json:"T"`
 		Created    BuInt      `json:"created"`
 		Miner      *BuString  `json:"miner,omitempty"`
-		Nonce      HashID     `json:"nonce"`
+		Nonce      Nonce      `json:"nonce"`
 		Note       *BuString  `json:"note,omitempty"`
 		Previd     *HashID    `json:"previd"` //nullable
 		Studentids *BuStrings `json:"studentids,omitempty"`
@@ -108,7 +108,7 @@ func MakeCoinbaseTransaction(height BuInt, outputs TxOutputs) CoinbaseTransactio
 	}
 }
 
-func MakeBlock(T HashID, created BuInt, miner *BuString, nonce HashID, note *BuString, previd *HashID, studentids *BuStrings, txids HashIDs) Block {
+func MakeBlock(T HashID, created BuInt, miner *BuString, nonce Nonce, note *BuString, previd *HashID, studentids *BuStrings, txids HashIDs) Block {
 	return Block{
 		Type:       OBJ_BLOCK,
 		T:          T,
