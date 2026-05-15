@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"marabu/internal/core"
 	"marabu/internal/peer"
@@ -18,6 +19,16 @@ import (
 
 // Pass the Manager in so the CLI can query the DB and start new clients
 func Start(manager *core.Manager) {
+
+	// 1. Clear the screen initially to make room for our panel
+	fmt.Print("\033[2J")
+
+	// 2. Start the Live Info background thread
+	go startLivePanel(manager)
+
+	// Shift the initial prompt down a few lines to give the panel room
+	fmt.Print("\033[7;1H")
+
 	fmt.Println("Marabu CLI started. Type 'help' for commands.")
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -168,6 +179,47 @@ func Start(manager *core.Manager) {
 		default:
 			fmt.Printf("Unknown command: %s\n", cmd)
 		}
+	}
+}
+
+func startLivePanel(manager *core.Manager) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Fetch latest stats
+		icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
+		tip, height, err := manager.GetChaintip()
+		tipStr := string(tip)
+		if err != nil {
+			tipStr = "[None / Genesis]"
+			height = 0
+		} else if len(tipStr) > 20 {
+			// abbreviate tip so it fits nicely
+			tipStr = tipStr[:10] + "..." + tipStr[len(tipStr)-10:]
+		}
+
+		// ANSI Magic Explanation:
+		// \033[s    - Save current cursor position (where the user is typing)
+		// \033[?25l - Hide the cursor (prevents flickering)
+		// \033[1;1H - Move cursor to Row 1, Column 1 (top left)
+		// \033[K    - Clear the line from cursor to end
+		// \033[?25h - Show the cursor again
+		// \033[u    - Restore cursor position (back to the prompt)
+
+		// We use padding (%-30s) to overwrite old characters if the new string is shorter
+		panel := fmt.Sprintf(
+			"\033[s\033[?25l\033[1;1H"+
+				"\033[K === MARABU NODE STATUS ===\n"+
+				"\033[K Peers: %d Total (%d Inbound | %d Outbound | %d Banned)\n"+
+				"\033[K Tip:   %s (Height: %d)\n"+
+				"\033[K ==========================\n"+
+				"\033[?25h\033[u",
+			(icnt + ocnt), icnt, ocnt, bcnt, tipStr, height,
+		)
+
+		// Print the block in one atomic write
+		fmt.Print(panel)
 	}
 }
 
