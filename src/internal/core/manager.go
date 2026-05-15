@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"marabu/internal/logs"
@@ -23,6 +24,9 @@ type Manager struct {
 
 	isSynced          atomic.Bool
 	chaintipsReceived atomic.Int32
+	lastSyncProgress  atomic.Int64
+
+	minerCancel context.CancelFunc
 
 	config NodeConfig
 }
@@ -75,6 +79,9 @@ func (m *Manager) CommitObject(obj types.Object, result ValidationResult) (bool,
 	switch o := obj.(type) {
 	case *types.Transaction:
 		return m.commitTransaction(o, result)
+	case *types.CoinbaseTransaction:
+		// Coinbase transactions are not gossiped, so we can skip the mempool logic and just return
+		return false, types.E_NONE, nil
 	case *types.Block:
 		return m.commitBlock(o, result)
 	default:
@@ -136,6 +143,10 @@ func (m *Manager) commitBlock(blk *types.Block, result ValidationResult) (bool, 
 		if err := m.db.putChaintip(result.ObjID, result.NewHeight); err != nil {
 			return false, types.E_INTERNAL_ERROR, fmt.Errorf("failed to update chaintip: %v", err)
 		}
+
+		if m.minerCancel != nil {
+			m.minerCancel() // Stop the miner if it's running. It will be restarted on the next loop.
+		}
 	}
 
 	// Clean up the mempool
@@ -148,6 +159,10 @@ func (m *Manager) commitBlock(blk *types.Block, result ValidationResult) (bool, 
 	}
 
 	return true, types.E_NONE, nil // Always gossip valid blocks
+}
+
+func (m *Manager) SetMiningCancel(cancelFunc context.CancelFunc) {
+	m.minerCancel = cancelFunc
 }
 
 func (m *Manager) ExistsObject(id types.HashID) (bool, error) {
@@ -303,10 +318,27 @@ func (m *Manager) FetchPendingBlocks(resolvedObjID types.HashID) []PendingBlock 
 	return m.db.fetchAndClearPendingBlocks(resolvedObjID)
 }
 
+func (m *Manager) ResetSyncTimer() {
+	m.lastSyncProgress.Store(time.Now().Unix())
+}
+
+func (m *Manager) TimeSinceLastProgress() time.Duration {
+	last := m.lastSyncProgress.Load()
+	if last == 0 {
+		return 5 * time.Minute // Force timeout if never set
+	}
+	return time.Since(time.Unix(last, 0))
+}
+
 func (m *Manager) CleanupPendingBlocks(notifyPeer func(peerAddr string, txid types.HashID)) {
 	ticker := time.NewTicker(1 * time.Second)
 
 	for range ticker.C {
+
+		if m.TimeSinceLastProgress() < 2*time.Minute {
+			continue
+		}
+
 		expiredBlocks := m.db.checkPendingBlocks()
 
 		for _, expired := range expiredBlocks {
@@ -316,10 +348,21 @@ func (m *Manager) CleanupPendingBlocks(notifyPeer func(peerAddr string, txid typ
 	}
 }
 
+func (m *Manager) GetMissingDependencies() []types.HashID {
+	m.db.pendingMutex.RLock()
+	defer m.db.pendingMutex.RUnlock()
+
+	var missing []types.HashID
+	for missingID := range m.db.pendingBlocks {
+		missing = append(missing, missingID)
+	}
+	return missing
+}
+
 func (m *Manager) SyncNodeState(requestMempool func()) {
 
 	// give the node 30 seconds to find a peer and start syncing
-	timeout := time.After(30 * time.Second)
+	timeout := time.After(3 * time.Minute)
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -327,7 +370,8 @@ func (m *Manager) SyncNodeState(requestMempool func()) {
 		select {
 		case <-ticker.C:
 
-			hasTips := m.chaintipsReceived.Load() > 0
+			// Check if we've received enough chaintips (from distinct peers) to be confident we're syncing from active peers, and that we've finished downloading all pending blocks.
+			hasTips := m.chaintipsReceived.Load() > 3
 			isDoneDownloading := m.db.getPendingBlocksCount() == 0
 
 			if hasTips && isDoneDownloading {
