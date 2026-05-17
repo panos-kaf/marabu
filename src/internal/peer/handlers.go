@@ -61,7 +61,7 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			p.log(mtype, types.E_NONE, "We do not have object "+string(ID)+", bouncing request.")
+			p.log(mtype, types.E_NONE, "We do not have object "+string(ID))
 			p.SendError(types.E_UNKNOWN_OBJECT, "Object not found: "+string(ID))
 			return
 		}
@@ -155,7 +155,7 @@ func (p *Peer) handleGetChainTip() {
 	if err != nil {
 
 		if errors.Is(err, core.ErrNotFound) {
-			p.log(types.MSG_GETCHAINTIP, types.E_NONE, "We do not have chain tip, bouncing request.")
+			p.log(types.MSG_GETCHAINTIP, types.E_NONE, "We do not have a chain tip.")
 			p.SendError(types.E_UNKNOWN_OBJECT, "Chain tip not found")
 			return
 		}
