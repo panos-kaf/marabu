@@ -34,24 +34,22 @@ func NewMiner(manager *core.Manager, pubkey types.HashID) *Miner {
 	}
 }
 
-func (m *Miner) BlockTemplate() *types.Block {
-
-	miner := types.BuString(m.Manager.Config().AgentName)
-	studentids := m.Manager.Config().StudentIDs
-
-	return &types.Block{
-		Type:       types.OBJ_BLOCK,
-		T:          types.TARGET,
-		Miner:      &miner,
-		Studentids: &studentids,
-	}
-}
-
 func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTransaction, error) {
 
 	timestamp := types.BuInt(time.Now().Unix())
 
-	block := m.BlockTemplate()
+	var block types.Block
+
+	block.Type = types.OBJ_BLOCK
+	block.T = types.TARGET
+
+	if m.Agent != "" {
+		block.Miner = &m.Agent
+	}
+
+	if len(m.StudentIDs) > 0 {
+		block.Studentids = &m.StudentIDs
+	}
 
 	block.Created = timestamp
 
@@ -100,7 +98,7 @@ func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTr
 
 	block.Note = &note
 
-	return block, &coinbase, nil
+	return &block, &coinbase, nil
 
 }
 
