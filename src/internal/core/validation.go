@@ -98,6 +98,9 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) ValidationResult {
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				result.ErrorCode = types.E_UNKNOWN_OBJECT
+				
+				result.MissingID = outpoint.Txid
+
 				result.Error = fmt.Errorf("Referenced transaction %s for input %d does not exist", outpoint.Txid, i)
 				return result
 			}
