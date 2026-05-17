@@ -4,429 +4,169 @@ package ui
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	"marabu/internal/core"
 	"marabu/internal/peer"
-	"marabu/internal/types"
 )
 
-// Pass the Manager in so the CLI can query the DB and start new clients
 func Start(manager *core.Manager) {
-
-	// 1. Clear the screen initially to make room for our panel
 	fmt.Print("\033[2J")
-
-	// 2. Start the Live Info background thread
 	go startLivePanel(manager)
-
-	// Shift the initial prompt down a few lines to give the panel room
 	fmt.Print("\033[7;1H")
 
-	fmt.Println("Marabu CLI started. Type 'help' for commands.")
+	fmt.Printf("%sMarabu CLI started. Type 'help' for commands.%s\n", bold+cyan, reset)
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		fmt.Print("> ")
+		fmt.Print(bold + green + "> " + reset)
+
 		if !scanner.Scan() {
-			break // Exit on EOF (Ctrl+D)
+			break
 		}
 
 		input := scanner.Text()
-		args := strings.Fields(input) // Splits by spaces
+		args := strings.Fields(input)
 		if len(args) == 0 {
 			continue
 		}
 
-		cmd := strings.ToLower(args[0])
+		executeCommand(strings.ToLower(args[0]), args, manager)
+	}
+}
 
-		switch cmd {
-		case "help", "?", "h":
-			fmt.Println("Available commands:")
-			fmt.Println("  info, i, status         - Show node diagnostics and chaintip")
-			fmt.Println("  peers, p                - List detailed connected peers")
-			fmt.Println("  connect <ip:port>       - Manually connect to a node")
-			fmt.Println("  disconnect <ip:port>    - Disconnect from a node (alias: drop)")
-			fmt.Println("  mute <ip|agent> <val>   - Mute logs from a spammy IP or Agent")
-			fmt.Println("  unmute <ip|agent> <val> - Unmute logs")
-			fmt.Println("  ban <target>            - Ban and kick an IP or Agent")
-			fmt.Println("  unban <target>          - Unban an IP or Agent")
-			fmt.Println("  banned                  - List all currently banned targets")
-			fmt.Println("  objects, o              - List all objects in the database")
-			fmt.Println("  get <hash>              - Fetch and display a specific object")
-			fmt.Println("  sync                    - Force broadcast GetPeers and GetChainTip")
-			fmt.Println("  exit, quit, q           - Exit the CLI")
+func executeCommand(cmd string, args []string, manager *core.Manager) {
+	switch cmd {
+	case "help", "?", "h":
+		printHelp()
 
-		case "info", "i", "status":
-			// Fetch networking stats
-			icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
+	case "info", "i", "status":
+		printInfo(manager)
 
-			fmt.Println("--- Node Status ---")
-			fmt.Printf("Peers:     %d Total (%d Inbound | %d Outbound | %d VIP)\n", (icnt + ocnt), icnt, ocnt, bcnt)
+	case "peers", "p":
+		listPeers()
 
-			// Fetch blockchain state from DB
-			tip, height, err := manager.GetChaintip()
-			if err != nil {
-				fmt.Println("Chaintip:  [None / Genesis]")
+	case "connect":
+		if len(args) == 2 {
+			connectToPeer(args[1], manager)
+		} else {
+			fmt.Printf("%sUsage: connect <ip:port>%s\n", red, reset)
+		}
+
+	case "disconnect", "drop":
+		if len(args) == 2 {
+			disconnectPeer(args[1])
+		} else {
+			fmt.Printf("%sUsage: disconnect <ip:port>%s\n", red, reset)
+		}
+
+	case "muted":
+		listMuted()
+
+	case "mute":
+		if len(args) == 2 && args[1] == "list" {
+			listMuted()
+		} else if len(args) >= 2 {
+			val := strings.Join(args[1:], " ")
+			peer.ConnManager.MutePeer(val)
+			fmt.Printf("%sMuted logs matching:%s %s\n", yellow, reset, val)
+		} else {
+			fmt.Printf("%sUsage: mute <ip or agent> OR mute list%s\n", red, reset)
+		}
+
+	case "unmute":
+		if len(args) >= 2 {
+			val := strings.Join(args[1:], " ")
+			if val == "*" {
+				cleared := peer.ConnManager.UnmuteAll()
+				fmt.Printf("%sCleared %d mute rules. All peers unmuted.%s\n", green, cleared, reset)
 			} else {
-				fmt.Printf("Chaintip:  %s\n", tip)
-				fmt.Printf("Height:    %d\n", height)
+				peer.ConnManager.UnmutePeer(val)
+				fmt.Printf("%sUnmuted logs matching:%s %s\n", green, reset, val)
 			}
-			fmt.Println("-------------------")
+		} else {
+			fmt.Printf("%sUsage: unmute <ip or agent> OR unmute *%s\n", red, reset)
+		}
 
-		case "peers", "p":
-			listPeers()
+	case "banned":
+		listBanned()
 
-		case "connect":
-			if len(args) == 2 {
-				connectToPeer(args[1], manager)
-			} else {
-				fmt.Println("Usage: connect <ip:port>")
-			}
-
-		case "disconnect", "drop":
-			if len(args) == 2 {
-				disconnectPeer(args[1])
-			} else {
-				fmt.Println("Usage: disconnect <ip:port>")
-			}
-
-		case "muted":
-			listMuted() // The new standalone command
-
-		case "mute":
-			if len(args) == 2 && args[1] == "list" {
-				listMuted()
-			} else if len(args) >= 2 {
-				val := strings.Join(args[1:], " ")
-				peer.ConnManager.MutePeer(val)
-				fmt.Printf("Muted logs matching: %s\n", val)
-			} else {
-				fmt.Println("Usage: mute <ip or agent> OR mute list")
-			}
-
-		case "unmute":
-			if len(args) >= 2 {
-				val := strings.Join(args[1:], " ")
-
-				// NEW: Check for the wildcard
-				if val == "*" {
-					cleared := peer.ConnManager.UnmuteAll()
-					fmt.Printf("Cleared %d mute rules. All peers unmuted.\n", cleared)
-				} else {
-					peer.ConnManager.UnmutePeer(val)
-					fmt.Printf("Unmuted logs matching: %s\n", val)
-				}
-			} else {
-				fmt.Println("Usage: unmute <ip or agent> OR unmute *")
-			}
-		case "banned":
+	case "ban":
+		if len(args) == 2 && args[1] == "list" {
 			listBanned()
+		} else if len(args) >= 2 {
+			val := strings.Join(args[1:], " ")
+			peer.ConnManager.BanPeer(val)
+			fmt.Printf("%sBanned and kicked target matching:%s %s\n", red, reset, val)
+		} else {
+			fmt.Printf("%sUsage: ban <ip or agent> OR ban list%s\n", red, reset)
+		}
 
-		case "ban":
-			if len(args) == 2 && args[1] == "list" {
-				listBanned()
-			} else if len(args) >= 2 {
-				val := strings.Join(args[1:], " ")
-				peer.ConnManager.BanPeer(val)
-				fmt.Printf("Banned and kicked target matching: %s\n", val)
+	case "unban":
+		if len(args) >= 2 {
+			val := strings.Join(args[1:], " ")
+			if val == "*" {
+				cleared := peer.ConnManager.UnbanAll()
+				fmt.Printf("%sCleared %d ban rules. All peers unbanned.%s\n", green, cleared, reset)
 			} else {
-				fmt.Println("Usage: ban <ip or agent> OR ban list")
+				peer.ConnManager.UnbanPeer(val)
+				fmt.Printf("%sUnbanned target matching:%s %s\n", green, reset, val)
+			}
+		} else {
+			fmt.Printf("%sUsage: unban <ip or agent> OR unban *%s\n", red, reset)
+		}
+
+	case "cores", "c", "miners", "m":
+		if len(args) == 2 {
+			cores, err := strconv.Atoi(args[1])
+			if err != nil || cores < 0 {
+				fmt.Printf("%sError: Cores must be a positive integer.%s\n", red, reset)
+				return
 			}
 
-		case "unban":
-			if len(args) >= 2 {
-				val := strings.Join(args[1:], " ")
-
-				// NEW: Check for the wildcard
-				if val == "*" {
-					cleared := peer.ConnManager.UnbanAll()
-					fmt.Printf("Cleared %d ban rules. All peers unbanned.\n", cleared)
-				} else {
-					peer.ConnManager.UnbanPeer(val)
-					fmt.Printf("Unbanned target matching: %s\n", val)
-				}
-			} else {
-				fmt.Println("Usage: unban <ip or agent> OR unban *")
+			maxCores := runtime.NumCPU()
+			if cores > maxCores {
+				fmt.Printf("%sWarning: Requested %d cores, but system only has %d. Capping at %d.%s\n",
+					yellow, cores, maxCores, maxCores, reset)
+				cores = maxCores
 			}
 
-		case "objects", "o":
-			listObjects(manager)
+			manager.SetMiningCores(cores)
 
-		case "get":
-			if len(args) == 2 {
-				inspectObject(args[1], manager)
+			if cores == 0 {
+				fmt.Printf("%sMiner paused. Using 0 cores.%s\n", yellow, reset)
 			} else {
-				fmt.Println("Usage: get <hash>")
+				fmt.Printf("%sMiner restarted with %d cores.%s\n", green, cores, reset)
 			}
-
-		case "sync":
-			fmt.Println("Forcing network sync...")
-			peer.BroadcastGetPeers()
-			peer.BroadcastGetChainTip()
-			fmt.Println("Sync requests broadcasted.")
-
-		case "exit", "quit", "q":
-			fmt.Println("Exiting CLI...")
-			os.Exit(0)
-
-		default:
-			fmt.Printf("Unknown command: %s\n", cmd)
-		}
-	}
-}
-
-func startLivePanel(manager *core.Manager) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Fetch latest stats
-		icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
-		tip, height, err := manager.GetChaintip()
-		tipStr := string(tip)
-		if err != nil {
-			tipStr = "[None / Genesis]"
-			height = 0
-		} else if len(tipStr) > 20 {
-			// abbreviate tip so it fits nicely
-			tipStr = tipStr[:10] + "..." + tipStr[len(tipStr)-10:]
+		} else {
+			fmt.Printf("%sUsage: cores <number>%s\n", red, reset)
 		}
 
-		// ANSI Magic Explanation:
-		// \033[s    - Save current cursor position (where the user is typing)
-		// \033[?25l - Hide the cursor (prevents flickering)
-		// \033[1;1H - Move cursor to Row 1, Column 1 (top left)
-		// \033[K    - Clear the line from cursor to end
-		// \033[?25h - Show the cursor again
-		// \033[u    - Restore cursor position (back to the prompt)
+	case "objects", "o":
+		listObjects(manager)
 
-		// We use padding (%-30s) to overwrite old characters if the new string is shorter
-		panel := fmt.Sprintf(
-			"\033[s\033[?25l\033[1;1H"+
-				"\033[K === MARABU NODE STATUS ===\n"+
-				"\033[K Peers: %d Total (%d Inbound | %d Outbound | %d Banned)\n"+
-				"\033[K Tip:   %s (Height: %d)\n"+
-				"\033[K ==========================\n"+
-				"\033[?25h\033[u",
-			(icnt + ocnt), icnt, ocnt, bcnt, tipStr, height,
-		)
-
-		// Print the block in one atomic write
-		fmt.Print(panel)
-	}
-}
-
-// -- Helper Functions --
-
-func listPeers() {
-	allPeers := peer.ConnManager.GetAll()
-	if len(allPeers) == 0 {
-		fmt.Println("No connected peers.")
-		return
-	}
-
-	fmt.Printf("%-20s | %-22s | %-10s | %-10s \n", "AGENT", "ADDRESS", "ORIGIN", "PERSISTENT")
-	fmt.Println(strings.Repeat("-", 70))
-	for _, p := range allPeers {
-		vipStatus := ""
-		if p.IsPersistent() {
-			vipStatus = "*"
+	case "get":
+		if len(args) == 2 {
+			inspectObject(args[1], manager)
+		} else {
+			fmt.Printf("%sUsage: get <hash>%s\n", red, reset)
 		}
 
-		agent := p.Agent()
-		if agent == "" {
-			agent = "Unknown"
-		}
+	case "sync":
+		fmt.Printf("%sForcing network sync...%s\n", yellow, reset)
+		peer.BroadcastGetPeers()
+		peer.BroadcastGetChainTip()
+		fmt.Printf("%sSync requests broadcasted.%s\n", green, reset)
 
-		// If someone has a ridiculously long agent name cap it so it doesn't break table formatting
-		if len(agent) > 20 {
-			agent = agent[:17] + "..."
-		}
+	case "exit", "quit", "q":
+		fmt.Printf("%sExiting CLI...%s\n", cyan, reset)
+		os.Exit(0)
 
-		fmt.Printf("%-20s | %-22s | %-10s | %-10s \n", agent, p.Addr(), p.Origin(), vipStatus)
+	default:
+		fmt.Printf("%sUnknown command: %s%s\n", red, cmd, reset)
 	}
-}
-
-func connectToPeer(addr string, manager *core.Manager) {
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		fmt.Println("Error: Invalid address format. Use <ip>:<port>")
-		return
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		fmt.Println("Error: Port must be a number.")
-		return
-	}
-
-	fmt.Printf("Dialing %s:%d...\n", host, port)
-	err = peer.StartClient(host, port, false, manager)
-	if err != nil {
-		fmt.Printf("Failed to connect: %v\n", err)
-	} else {
-		fmt.Println("Connection initiated successfully.")
-	}
-}
-
-func disconnectPeer(addr string) {
-	p, exists := peer.ConnManager.Exists(addr)
-	if !exists {
-		fmt.Printf("Error: No active connection found for '%s'\n", addr)
-		return
-	}
-
-	p.Disconnect()
-	fmt.Printf("Dropped connection to %s\n", addr)
-}
-
-func inspectObject(hashStr string, manager *core.Manager) {
-	hash := types.HashID(hashStr)
-
-	obj, err := manager.GetObject(hash)
-	if err != nil {
-		fmt.Printf("Error: Could not find object %s in database.\n", hashStr)
-		return
-	}
-
-	// Pretty-print the JSON output so it's actually readable in the terminal!
-	prettyJSON, err := json.MarshalIndent(obj, "", "  ")
-	if err != nil {
-		fmt.Printf("Error formatting object: %v\n", err)
-		return
-	}
-
-	fmt.Printf("--- Object %s ---\n", hashStr)
-	fmt.Println(string(prettyJSON))
-	fmt.Println("----------------------------------------------------------------")
-}
-
-func listMuted() {
-	records := peer.ConnManager.GetMuted()
-
-	fmt.Println("\n=== Muted Targets ===")
-
-	if len(records) == 0 {
-		fmt.Println("No peers are currently muted.")
-		fmt.Println("=====================")
-		return
-	}
-
-	// Print the table header
-	fmt.Printf("%-20s | %-20s | %-15s\n", "RULE / TARGET", "KNOWN AGENT", "KNOWN IP")
-	fmt.Println(strings.Repeat("-", 61))
-
-	// Print the rows
-	for _, r := range records {
-
-		// Cap strings so they don't break the table formatting
-		agent := r.Agent
-		if len(agent) > 17 {
-			agent = agent[:14] + "..."
-		}
-
-		target := r.Target
-		if len(target) > 17 {
-			target = target[:14] + "..."
-		}
-
-		fmt.Printf("%-20s | %-20s | %-15s\n", target, agent, r.IP)
-	}
-	fmt.Println("=====================")
-}
-
-func listBanned() {
-	records := peer.ConnManager.GetBanned()
-
-	fmt.Println("\n=== Banned Targets ===")
-
-	if len(records) == 0 {
-		fmt.Println("No peers are currently banned.")
-		fmt.Println("======================")
-		return
-	}
-
-	fmt.Printf("%-20s | %-20s | %-15s\n", "RULE / TARGET", "KNOWN AGENT", "KNOWN IP")
-	fmt.Println(strings.Repeat("-", 61))
-
-	for _, r := range records {
-		agent := r.Agent
-		if len(agent) > 17 {
-			agent = agent[:14] + "..."
-		}
-
-		target := r.Target
-		if len(target) > 17 {
-			target = target[:14] + "..."
-		}
-
-		fmt.Printf("%-20s | %-20s | %-15s\n", target, agent, r.IP)
-	}
-	fmt.Println("======================")
-}
-
-func listObjects(manager *core.Manager) {
-	ids, err := manager.GetAllObjectIDs()
-	if err != nil {
-		fmt.Printf("Error scanning database: %v\n", err)
-		return
-	}
-
-	if len(ids) == 0 {
-		fmt.Println("No objects found in the database.")
-		return
-	}
-
-	var blocks []types.HashID
-	var txs []types.HashID
-	var unknown []types.HashID
-
-	fmt.Println("Scanning database...")
-
-	// Sort the objects into buckets
-	for _, id := range ids {
-		obj, err := manager.GetObject(id)
-		if err != nil {
-			unknown = append(unknown, id)
-			continue
-		}
-
-		switch obj.ObjectType() {
-		case types.OBJ_BLOCK:
-			blocks = append(blocks, id)
-		case types.OBJ_TRANSACTION:
-			txs = append(txs, id)
-		default:
-			unknown = append(unknown, id)
-		}
-	}
-
-	// Print the formatted results
-	fmt.Println("\n=== Stored Objects ===")
-	fmt.Printf("Total: %d\n\n", len(ids))
-
-	fmt.Printf("Blocks (%d):\n", len(blocks))
-	for _, b := range blocks {
-		fmt.Printf("  | %s\n", b)
-	}
-
-	fmt.Printf("\nTransactions (%d):\n", len(txs))
-	for _, t := range txs {
-		fmt.Printf("  | %s\n", t)
-	}
-
-	if len(unknown) > 0 {
-		fmt.Printf("\nUnknown/Corrupted (%d):\n", len(unknown))
-		for _, u := range unknown {
-			fmt.Printf("    %s\n", u)
-		}
-	}
-	fmt.Println("======================")
 }

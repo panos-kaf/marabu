@@ -1,0 +1,72 @@
+//go:build cli
+
+package ui
+
+import (
+	"fmt"
+	"marabu/internal/core"
+	"marabu/internal/peer"
+	"time"
+)
+
+// ANSI Color Codes for the CLI
+const (
+	reset   = "\033[0m"
+	bold    = "\033[1m"
+	red     = "\033[31m"
+	green   = "\033[32m"
+	yellow  = "\033[33m"
+	blue    = "\033[34m"
+	magenta = "\033[35m"
+	cyan    = "\033[36m"
+	white   = "\033[37m"
+)
+
+func printHelp() {
+	fmt.Printf("\n%sAvailable commands:%s\n", bold+yellow, reset)
+	fmt.Printf("  %sinfo, i, status%s         - Show node diagnostics and chaintip\n", cyan, reset)
+	fmt.Printf("  %speers, p%s                - List detailed connected peers\n", cyan, reset)
+	fmt.Printf("  %sconnect <ip:port>%s       - Manually connect to a node\n", cyan, reset)
+	fmt.Printf("  %sdisconnect <ip:port>%s    - Disconnect from a node (alias: drop)\n", cyan, reset)
+	fmt.Printf("  %smute <ip|agent> <val>%s   - Mute logs from a spammy IP or Agent\n", cyan, reset)
+	fmt.Printf("  %sunmute <ip|agent> <val>%s - Unmute logs\n", cyan, reset)
+	fmt.Printf("  %sban <target>%s            - Ban and kick an IP or Agent\n", cyan, reset)
+	fmt.Printf("  %sunban <target>%s          - Unban an IP or Agent\n", cyan, reset)
+	fmt.Printf("  %sbanned%s                  - List all currently banned targets\n", cyan, reset)
+	fmt.Printf("  %sobjects, o%s              - List all objects in the database\n", cyan, reset)
+	fmt.Printf("  %sget <hash>%s              - Fetch and display a specific object\n", cyan, reset)
+	fmt.Printf("  %scores, c <num>%s          - Adjust the number of CPU cores used for mining\n", cyan, reset)
+	fmt.Printf("  %ssync%s                    - Force broadcast GetPeers and GetChainTip\n", cyan, reset)
+	fmt.Printf("  %sexit, quit, q%s           - Exit the CLI\n\n", cyan, reset)
+}
+
+func printInfo(manager *core.Manager) {
+	icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
+
+	fmt.Printf("\n%s--- Node Status ---%s\n", bold+cyan, reset)
+	fmt.Printf("%sPeers:%s     %d Total (%s%d Inbound%s | %s%d Outbound%s | %s%d VIP%s)\n",
+		bold, reset, (icnt + ocnt), green, icnt, reset, blue, ocnt, reset, magenta, bcnt, reset)
+
+	tip, height, err := manager.GetChaintip()
+	if err != nil {
+		fmt.Printf("%sChaintip:%s  [None / Genesis]\n", bold, reset)
+	} else {
+		fmt.Printf("%sChaintip:%s  %s%s%s\n", bold, reset, magenta, tip, reset)
+		fmt.Printf("%sHeight:%s    %s%d%s\n", bold, reset, yellow, height, reset)
+	}
+
+	active, elapsed, hashrate := manager.GetMiningStats()
+	cores := manager.GetMiningCores()
+
+	if active {
+		fmt.Printf("%sMiner:%s     %sActive%s (%s over %s using %d cores)\n",
+			bold, reset, green, reset, formatHashrate(hashrate), elapsed.Round(time.Second), cores)
+	} else {
+		state := "Idle"
+		if cores == 0 {
+			state = "Paused (0 cores)"
+		}
+		fmt.Printf("%sMiner:%s     %s%s%s\n", bold, reset, red, state, reset)
+	}
+	fmt.Printf("%s-------------------%s\n\n", bold+cyan, reset)
+}
