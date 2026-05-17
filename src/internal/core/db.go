@@ -172,7 +172,7 @@ func (d *database) getAllObjectIDs() ([]types.HashID, error) {
 		keyStr := string(iter.Key())
 
 		// Filter out our internal state tracking keys
-		if keyStr == "chaintip" || strings.HasPrefix(keyStr, "utxo-") || strings.HasPrefix(keyStr, "fee-") {
+		if keyStr == "chaintip" || strings.HasPrefix(keyStr, "utxo-") || strings.HasPrefix(keyStr, "fee-") || strings.HasPrefix(keyStr, "mempool-") {
 			continue
 		}
 
@@ -466,8 +466,8 @@ func (d *database) checkPendingBlocks() []struct {
 	Block *types.Block
 	Txid  types.HashID
 } {
-	d.pendingMutex.RLock()
-	defer d.pendingMutex.RUnlock()
+	d.pendingMutex.Lock()
+	defer d.pendingMutex.Unlock()
 	now := time.Now()
 	var expired []struct {
 		Peer  string
