@@ -36,23 +36,50 @@ func StartTopologyManager(Manager *core.Manager) {
 
 	for {
 		select {
+
 		case <-churnTicker.C:
 			churnRandomPeer()
+
 		case <-replenishTicker.C:
 			replenishOutbound(Manager)
+
 		case <-gossipTicker.C:
 			BroadcastGetPeers()
 			BroadcastGetChainTip()
+
 		case <-syncStallTicker.C:
-			missingHashes := Manager.GetMissingDependencies()
+			fetchMissingDependencies(Manager)
+		}
+	}
+}
 
-			if len(missingHashes) > 0 {
-				globalLog(fmt.Sprintf("Watchdog: Sync stalled. Re-requesting %d missing parent blocks from network...", len(missingHashes)))
+func fetchMissingDependencies(Manager *core.Manager) {
+	missingHashes := Manager.GetMissingDependencies()
 
-				for _, hash := range missingHashes {
-					BroadcastGetObject(hash)
-				}
-			}
+	if len(missingHashes) == 0 {
+		return
+	}
+
+	limit := min(10, len(missingHashes))
+
+	peers := ConnManager.GetAll()
+	if len(peers) == 0 {
+		return
+	}
+
+	globalLog(fmt.Sprintf("Watchdog: Sync stalled. Asking network for %d missing objects...", limit))
+
+	rand.Shuffle(len(peers), func(i, j int) {
+		peers[i], peers[j] = peers[j], peers[i]
+	})
+
+	peersToAsk := min(2, len(peers))
+
+	for i := range limit {
+		hash := missingHashes[i]
+
+		for p := range peersToAsk {
+			peers[p].SendGetObject(hash)
 		}
 	}
 }
