@@ -15,16 +15,20 @@ import (
 	"marabu/internal/ui"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 func main() {
 
-	var config core.NodeConfig
+	defaultCores := max(runtime.NumCPU()-1, 1)
 
+	var config core.NodeConfig
 	var agentStr string
 
 	flag.IntVar(&config.ServerPort, "port", 18018, "The port to listen on")
 	flag.IntVar(&config.ServerPort, "p", 18018, "Alias for --port")
+
+	flag.IntVar(&config.MiningCores, "cores", defaultCores, "Number of CPU cores to use for mining (default: all cores minus one)")
 
 	flag.StringVar(&agentStr, "agent", "marabobos", "Agent name")
 	flag.StringVar(&agentStr, "a", "marabobos", "Alias for --agent")
