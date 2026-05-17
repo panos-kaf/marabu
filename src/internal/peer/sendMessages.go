@@ -6,6 +6,7 @@ import (
 	"marabu/internal/types"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -20,7 +21,13 @@ func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string
 	if mkerr != nil {
 		return fmt.Errorf("Failed to create %s message: %w", t, mkerr)
 	}
+
+	p.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+
 	_, err := p.conn.Write([]byte(msg))
+
+	p.conn.SetWriteDeadline(time.Time{})
+
 	if err != nil {
 		return fmt.Errorf("Failed to send %s message: %w", t, err)
 	}
@@ -79,7 +86,7 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 
 func (p *Peer) SendHello() error {
 
-	agent := types.BuString(p.Manager.Agent())
+	agent := types.BuString(p.Manager.Config().AgentName)
 
 	msg, err := protocol.MakeHello(&agent)
 	return p.SendMessage(types.MSG_HELLO, types.E_NONE, msg, err)
