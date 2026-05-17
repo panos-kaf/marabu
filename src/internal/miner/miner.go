@@ -1,16 +1,21 @@
 package miner
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"marabu/internal/core"
 	"marabu/internal/crypto"
 	"marabu/internal/logs"
 	"marabu/internal/peer"
+	"marabu/internal/serialization"
 	"marabu/internal/types"
 	"marabu/internal/utils"
 	"math/big"
 	"time"
+
+	"golang.org/x/crypto/blake2s"
 )
 
 type Miner struct {
@@ -24,15 +29,15 @@ func NewMiner(manager *core.Manager, pubkey types.HashID) *Miner {
 	return &Miner{
 		Manager:    manager,
 		Pubkey:     pubkey,
-		Agent:      manager.Agent(),
-		StudentIDs: manager.StudentIDs(),
+		Agent:      manager.Config().AgentName,
+		StudentIDs: manager.Config().StudentIDs,
 	}
 }
 
 func (m *Miner) BlockTemplate() *types.Block {
 
-	miner := types.BuString(m.Manager.Agent())
-	studentids := m.Manager.StudentIDs()
+	miner := types.BuString(m.Manager.Config().AgentName)
+	studentids := m.Manager.Config().StudentIDs
 
 	return &types.Block{
 		Type:       types.OBJ_BLOCK,
@@ -103,13 +108,77 @@ func (m *Miner) SetNonce(block *types.Block, nonce big.Int) {
 	block.Nonce = types.Nonce(hexNonce)
 }
 
+func (m *Miner) mineWorker(
+	ctx context.Context,
+	templateBytes []byte,
+	nonceOffset int,
+	target *big.Int,
+	resultCh chan<- string,
+	hashTracker chan<- uint64,
+) {
+	// Give worker its own private memory
+	workerBytes := make([]byte, len(templateBytes))
+	copy(workerBytes, templateBytes)
+
+	hasher, _ := blake2s.New256(nil)
+	nonce := utils.GenerateRandomNonce()
+	one := big.NewInt(1)
+	var localHashes uint64 = 0
+
+	rawNonceBytes := make([]byte, 32)
+
+	hashResult := make([]byte, 32)
+
+	hashInt := new(big.Int)
+
+	for {
+		// Check if we should die (because another core or the network found a block)
+		select {
+		case <-ctx.Done():
+			hashTracker <- localHashes // Report leftover hashes before dying
+			return
+		default:
+		}
+
+		nonce.Add(&nonce, one)
+
+		// Fill our pre-allocated array with the binary math (padded to exactly 32 bytes)
+		nonce.FillBytes(rawNonceBytes)
+
+		// Directly encode those raw bytes as a 64-character hex string
+		// straight into our worker's template array
+		hex.Encode(workerBytes[nonceOffset:nonceOffset+64], rawNonceBytes)
+
+		hasher.Reset()
+		hasher.Write(workerBytes)
+
+		hashResult = hasher.Sum(hashResult[:0])
+
+		hashInt.SetBytes(hashResult)
+
+		localHashes++
+
+		// Batch report telemetry to avoid channel bottleneck
+		if localHashes%1000 == 0 {
+			hashTracker <- 1000
+			localHashes = 0
+		}
+
+		// found a valid nonce
+		if hashInt.Cmp(target) < 0 {
+			hashTracker <- localHashes
+			resultCh <- fmt.Sprintf("%064x", &nonce) // Send the winning nonce back to the orchestrator
+			return
+		}
+	}
+}
+
 func (m *Miner) Mine(ctx context.Context) error {
 
+	m.Manager.SetMiningState(true)
+	defer m.Manager.SetMiningState(false) // Automatically reset to idle when this function exits
+
 	target := types.TARGET_BIGINT()
-
-	nonce := utils.GenerateRandomNonce()
-
-	one := big.NewInt(1)
 
 	block, coinbase, err := m.BuildBlock(types.BuString("a noteworthy note"))
 	if err != nil {
@@ -117,35 +186,58 @@ func (m *Miner) Mine(ctx context.Context) error {
 		return err
 	}
 
-	hash, err := crypto.HashObjectBigInt(block)
+	dummyNonce := types.Nonce(types.DUMMY_HASH)
+	block.Nonce = dummyNonce
 
+	// Canonicalize the block
+	templateStr, err := serialization.Canonicalize(block)
 	if err != nil {
-		logs.GlobalLog(fmt.Sprintf("Error hashing block: %v", err))
-		return err
+		return fmt.Errorf("failed to canonicalize template: %v", err)
+	}
+	templateBytes := []byte(templateStr)
+
+	// Find the exact memory offset where our dummy nonce starts
+	nonceOffset := bytes.Index(templateBytes, []byte(dummyNonce))
+	if nonceOffset == -1 {
+		return fmt.Errorf("failed to find nonce offset in canonicalized block")
 	}
 
-	for {
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	defer cancelWorkers() // Ensure workers are killed no matter how this function exits
 
-		select {
-		case <-ctx.Done():
-			logs.GlobalLog("Network found a block first. Aborting current mining job.")
-			return fmt.Errorf("mining interrupted")
-		default:
-			// continue mining
-		}
-		nonce.Add(&nonce, one)
-		m.SetNonce(block, nonce)
+	numCores := m.Manager.GetMiningCores()
+	logs.GlobalLog(fmt.Sprintf("Starting mining with %d cores...", numCores))
 
-		hash, err = crypto.HashObjectBigInt(block)
-		if err != nil {
-			return err
-		}
-		if hash.Cmp(target) < 0 {
-			break
-		}
+	resultCh := make(chan string)
+	hashTracker := make(chan uint64, numCores*2) // Buffered channel for telemetry
+
+	for range numCores {
+		go m.mineWorker(workerCtx, templateBytes, nonceOffset, target, resultCh, hashTracker)
 	}
 
-	logs.GlobalLog(fmt.Sprintf("Found nonce for block %s!", hash))
+	// Start a background telemetry aggregator
+	go func() {
+		for h := range hashTracker {
+			m.Manager.AddMiningHashes(h)
+		}
+	}()
+
+	var winningNonce string
+
+	select {
+	case <-ctx.Done():
+		// The network found a block first (triggered by m.Manager.minerCancel)
+		logs.GlobalLog("Network found a block first. Aborting current mining job.")
+		return fmt.Errorf("mining interrupted")
+
+	case winningNonce = <-resultCh:
+		// One of our cores found the solution
+		cancelWorkers() // Instantly kill all other cores
+		block.Nonce = types.Nonce(winningNonce)
+	}
+
+	finalHash, _ := crypto.HashObject(block)
+	logs.GlobalLog(fmt.Sprintf("Found nonce for block %s!", finalHash))
 
 	m.Manager.StoreObject(coinbase)
 
@@ -172,19 +264,14 @@ func (m *Miner) StartMining() {
 	logs.GlobalLog("Miner orchestrator started...")
 
 	for {
-		// 1. Create a fresh kill-switch for THIS specific block attempt
 		ctx, cancel := context.WithCancel(context.Background())
 
-		// 2. Hand the kill-switch to the Manager so it can pull the trigger if a network block arrives
 		m.Manager.SetMiningCancel(cancel)
 
-		// 3. Start hashing! This will block until we win, or we get killed.
 		err := m.Mine(ctx)
 		if err != nil {
 			logs.GlobalLog(fmt.Sprintf("Mining round ended: %v", err))
 		}
 
-		// 4. We either won the block or lost the race.
-		// The loop instantly restarts, creates a new context, and tries again for the NEXT height!
 	}
 }
