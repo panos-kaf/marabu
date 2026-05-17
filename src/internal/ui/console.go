@@ -47,6 +47,9 @@ func executeCommand(cmd string, args []string, manager *core.Manager) {
 	case "info", "i", "status":
 		printInfo(manager)
 
+	case "id", "identity", "miner":
+		printIdentity(manager)
+
 	case "peers", "p":
 		listPeers()
 

@@ -50,10 +50,7 @@ func ParseConfig() core.NodeConfig {
 
 	defaultStudentIDs := os.Getenv("STUDENT_IDS")
 
-	defaultCores := runtime.NumCPU() - 1
-	if defaultCores < 1 {
-		defaultCores = 1
-	}
+	defaultCores := max(1, runtime.NumCPU()-1)
 
 	var agentStr string
 	var studentIDsStr string
@@ -109,6 +106,15 @@ func main() {
 	}
 	peersFile.Close()
 
+	// Load secret key
+	secretKey, err := crypto.LoadOrGenerateKey(filepath.Join(config.DBPath, "node.priv"))
+	if err != nil {
+		panic(fmt.Sprintf("Failed to load node key: %v", err))
+	}
+
+	pubKeyBytes := secretKey.Public().(ed25519.PublicKey)
+	config.PubKey = types.HashID(hex.EncodeToString(pubKeyBytes))
+
 	// Boot Sequence
 	Manager := core.NewManager(config)
 	Manager.InitializeMempool()
@@ -117,16 +123,7 @@ func main() {
 	go Manager.SyncNodeState(peer.BroadcastGetMempool)
 	go peer.StartServer(Manager)
 
-	// Load secret key
-	secretKey, err := crypto.LoadOrGenerateKey(filepath.Join(config.DBPath, "node.priv"))
-	if err != nil {
-		panic(fmt.Sprintf("Failed to load node key: %v", err))
-	}
-
-	pubKeyBytes := secretKey.Public().(ed25519.PublicKey)
-	myPubKey := types.HashID(hex.EncodeToString(pubKeyBytes))
-
-	Miner := miner.NewMiner(Manager, myPubKey)
+	Miner := miner.NewMiner(Manager, config.PubKey)
 	go Miner.StartMining()
 
 	bootstrap.StartNode(Manager)

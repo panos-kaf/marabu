@@ -19,6 +19,7 @@ type NodeConfig struct {
 	DBPath      string
 	StudentIDs  types.BuStrings
 	MiningCores int
+	PubKey      types.HashID
 }
 
 type Manager struct {

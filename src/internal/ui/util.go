@@ -25,6 +25,7 @@ const (
 func printHelp() {
 	fmt.Printf("\n%sAvailable commands:%s\n", bold+yellow, reset)
 	fmt.Printf("  %sinfo, i, status%s         - Show node diagnostics and chaintip\n", cyan, reset)
+	fmt.Printf("  %sid, identity, miner%s     - Show node identity, agent, and student IDs\n", cyan, reset)
 	fmt.Printf("  %speers, p%s                - List detailed connected peers\n", cyan, reset)
 	fmt.Printf("  %sconnect <ip:port>%s       - Manually connect to a node\n", cyan, reset)
 	fmt.Printf("  %sdisconnect <ip:port>%s    - Disconnect from a node (alias: drop)\n", cyan, reset)
@@ -69,4 +70,47 @@ func printInfo(manager *core.Manager) {
 		fmt.Printf("%sMiner:%s     %s%s%s\n", bold, reset, red, state, reset)
 	}
 	fmt.Printf("%s-------------------%s\n\n", bold+cyan, reset)
+}
+
+func printIdentity(manager *core.Manager) {
+	agent := manager.Config().AgentName
+	studentIDs := manager.Config().StudentIDs
+	pubkey := manager.Config().PubKey
+
+	fmt.Printf("\n%s=== Node Identity ===%s\n", bold+cyan, reset)
+
+	fmt.Printf("%sAgent Name:%s  %s%s%s\n", bold, reset, magenta, agent, reset)
+
+	fmt.Printf("%sPublic Key:%s  %s%s%s\n", bold, reset, yellow, pubkey, reset)
+
+	if len(studentIDs) > 0 {
+		fmt.Printf("%sStudent IDs:%s %s", bold, reset, green)
+		for i, id := range studentIDs {
+			if i > 0 {
+				fmt.Print(", ")
+			}
+			fmt.Print(id)
+		}
+		fmt.Println(reset)
+	} else {
+		fmt.Printf("%sStudent IDs:%s %s[None configured]%s\n", bold, reset, yellow, reset)
+	}
+
+	active, _, hashrate := manager.GetMiningStats()
+	cores := manager.GetMiningCores()
+
+	fmt.Printf("\n%s--- Mining Hardware ---%s\n", bold+cyan, reset)
+	fmt.Printf("%sAllocated Cores:%s %d\n", bold, reset, cores)
+
+	if active {
+		fmt.Printf("%sCurrent Hashrate:%s %s%s%s\n", bold, reset, green, formatHashrate(hashrate), reset)
+	} else {
+		state := "Idle"
+		if cores == 0 {
+			state = "Paused (0 cores)"
+		}
+		fmt.Printf("%sCurrent Hashrate:%s %s%s%s\n", bold, reset, red, state, reset)
+	}
+
+	fmt.Printf("%s=====================%s\n\n", bold+cyan, reset)
 }
