@@ -65,6 +65,7 @@ func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTr
 
 	if !isGen {
 		block.Previd = &previd
+		height += 1
 	}
 
 	mempool := m.Manager.GetMempoolEntries()
