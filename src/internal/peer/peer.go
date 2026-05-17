@@ -233,7 +233,7 @@ func (p *Peer) handleMessage(raw string) {
 
 func StartServer(Manager *core.Manager) error {
 
-	port := Manager.Port()
+	port := Manager.Config().ServerPort
 
 	addr := net.JoinHostPort("", strconv.Itoa(port))
 	ln, err := net.Listen("tcp", addr)
