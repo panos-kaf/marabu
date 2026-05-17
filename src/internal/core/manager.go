@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"marabu/internal/logs"
 	"marabu/internal/types"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,10 +14,11 @@ import (
 )
 
 type NodeConfig struct {
-	ServerPort int
-	AgentName  types.BuString
-	DBPath     string
-	StudentIDs types.BuStrings
+	ServerPort  int
+	AgentName   types.BuString
+	DBPath      string
+	StudentIDs  types.BuStrings
+	MiningCores int
 }
 
 type Manager struct {
@@ -28,7 +30,12 @@ type Manager struct {
 
 	minerCancel context.CancelFunc
 
-	config NodeConfig
+	miningActive atomic.Bool
+	miningStart  atomic.Int64
+	miningHashes atomic.Uint64
+
+	configMutex sync.RWMutex // Protects the config at runtimes
+	config      NodeConfig
 }
 
 var ErrNotFound = errors.New("object not found in database")
@@ -47,16 +54,10 @@ func NewManager(config NodeConfig) *Manager {
 
 }
 
-func (m *Manager) Port() int {
-	return m.config.ServerPort
-}
-
-func (m *Manager) Agent() types.BuString {
-	return m.config.AgentName
-}
-
-func (m *Manager) StudentIDs() types.BuStrings {
-	return m.config.StudentIDs
+func (m *Manager) Config() NodeConfig {
+	m.configMutex.RLock()
+	defer m.configMutex.RUnlock()
+	return m.config
 }
 
 func (m *Manager) IsSynced() bool {
@@ -408,6 +409,11 @@ func (m *Manager) HandleReorg(oldTip types.HashID, newTip types.HashID) {
 		utxoOld, _ := m.GetUTXO(currOld)
 		utxoNew, _ := m.GetUTXO(currNew)
 
+		if utxoOld == nil || utxoNew == nil {
+			logs.GlobalLog(fmt.Sprintf("Error during reorg handling: missing UTXO for %s or %s", currOld, currNew))
+			return
+		}
+
 		if utxoOld.Height > utxoNew.Height {
 			deadBlocks = append(deadBlocks, currOld)
 			oldBlkObj, _ := m.GetObject(currOld)
@@ -458,4 +464,53 @@ func (m *Manager) HandleReorg(oldTip types.HashID, newTip types.HashID) {
 
 	fmt.Println("Sweeping mempool against new chaintip...")
 	m.InitializeMempool()
+}
+
+func (m *Manager) SetMiningState(active bool) {
+	m.miningActive.Store(active)
+	if active {
+		// Reset the clock and the counter when a new block starts
+		m.miningStart.Store(time.Now().UnixNano())
+		m.miningHashes.Store(0)
+	}
+}
+
+func (m *Manager) SetMiningCores(cores int) {
+	m.configMutex.Lock()
+	m.config.MiningCores = cores
+	m.configMutex.Unlock()
+
+	// THE MAGIC TRICK:
+	// Instantly kill the current mining job so it restarts with the new core count!
+	if m.minerCancel != nil {
+		m.minerCancel()
+	}
+}
+
+// Update your getter so the Miner safely reads it
+func (m *Manager) GetMiningCores() int {
+	m.configMutex.RLock()
+	defer m.configMutex.RUnlock()
+	return m.config.MiningCores
+}
+
+func (m *Manager) AddMiningHashes(count uint64) {
+	m.miningHashes.Add(count)
+}
+
+func (m *Manager) GetMiningStats() (active bool, elapsed time.Duration, hashrate float64) {
+	active = m.miningActive.Load()
+	if !active {
+		return false, 0, 0
+	}
+
+	start := time.Unix(0, m.miningStart.Load())
+	elapsed = time.Since(start)
+	hashes := m.miningHashes.Load()
+
+	if elapsed.Seconds() > 0 {
+		hashrate = float64(hashes) / elapsed.Seconds()
+	}
+
+	return active, elapsed, hashrate
 }
