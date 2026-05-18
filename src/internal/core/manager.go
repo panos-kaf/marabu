@@ -14,9 +14,10 @@ import (
 )
 
 type NodeConfig struct {
+	DBPath      string
 	ServerPort  int
 	AgentName   types.BuString
-	DBPath      string
+	Note        types.BuString
 	StudentIDs  types.BuStrings
 	MiningCores int
 	PubKey      types.HashID
@@ -53,6 +54,12 @@ func NewManager(config NodeConfig) *Manager {
 
 	return m
 
+}
+
+func (m *Manager) SetNote(note types.BuString) {
+	m.configMutex.Lock()
+	m.config.Note = note
+	m.configMutex.Unlock()
 }
 
 func (m *Manager) Config() NodeConfig {

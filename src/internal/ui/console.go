@@ -12,6 +12,7 @@ import (
 
 	"marabu/internal/core"
 	"marabu/internal/peer"
+	"marabu/internal/types"
 )
 
 func Start(manager *core.Manager) {
@@ -147,6 +148,32 @@ func executeCommand(cmd string, args []string, manager *core.Manager) {
 			}
 		} else {
 			fmt.Printf("%sUsage: cores <number>%s\n", red, reset)
+		}
+
+	case "note":
+		if len(args) >= 2 {
+			if args[1] == "new" || args[1] == "set" {
+				fmt.Printf("%sEnter new note (max 256 chars):%s ", yellow, reset)
+				noteScanner := bufio.NewScanner(os.Stdin)
+				if noteScanner.Scan() {
+					newNote := noteScanner.Text()
+					if len(newNote) > 256 {
+						fmt.Printf("%sError: Note cannot exceed 256 characters.%s\n", red, reset)
+						return
+					}
+					manager.SetNote(types.BuString(newNote))
+					fmt.Printf("%sNote updated successfully.%s\n", green, reset)
+				} else {
+					fmt.Printf("%sError reading note input.%s\n", red, reset)
+				}
+			}
+		} else {
+			note := manager.Config().Note
+			if note == "" {
+				fmt.Printf("%sNo note set.%s\n", yellow, reset)
+			} else {
+				fmt.Printf("%sCurrent note:%s %s\n", cyan, reset, note)
+			}
 		}
 
 	case "objects", "o":
