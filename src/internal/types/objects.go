@@ -7,6 +7,7 @@ type (
 	// An object is either a Tx, a coinbase Tx, or a block
 	Object interface {
 		ObjectType() ObjectType
+		ObjID() *HashID
 	}
 	ObjectType string
 
@@ -40,12 +41,18 @@ type (
 		Type    ObjectType `json:"type"`
 		Inputs  TxInputs   `json:"inputs"`
 		Outputs TxOutputs  `json:"outputs"`
+
+		// internal field to cache the tx's ID after computing it once
+		CachedID *HashID `json:"-"`
 	}
 
 	CoinbaseTransaction struct {
 		Type    ObjectType `json:"type"`
 		Height  *BuInt     `json:"height"`
 		Outputs TxOutputs  `json:"outputs"`
+
+		// internal field to cache the tx's ID after computing it once
+		CachedID *HashID `json:"-"`
 	}
 
 	Block struct {
@@ -58,6 +65,9 @@ type (
 		Previd     *HashID    `json:"previd"` //nullable
 		Studentids *BuStrings `json:"studentids,omitempty"`
 		Txids      HashIDs    `json:"txids"`
+
+		// internal field to cache the block's ID after computing it once
+		CachedID *HashID `json:"-"`
 	}
 )
 
@@ -71,6 +81,18 @@ func (c CoinbaseTransaction) ObjectType() ObjectType {
 
 func (b Block) ObjectType() ObjectType {
 	return OBJ_BLOCK
+}
+
+func (t *Transaction) ObjID() *HashID {
+	return t.CachedID
+}
+
+func (c *CoinbaseTransaction) ObjID() *HashID {
+	return c.CachedID
+}
+
+func (b *Block) ObjID() *HashID {
+	return b.CachedID
 }
 
 // -- object constructors --

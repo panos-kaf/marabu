@@ -313,7 +313,7 @@ func (d *database) notifyWaiters(id types.HashID, obj types.Object) {
 
 func (d *database) addMempoolEntry(tx *types.Transaction, fee types.Picabu) error {
 
-	txid, err := crypto.HashObject(tx)
+	txid, err := crypto.GetObjectID(tx)
 	if err != nil {
 		return fmt.Errorf("error hashing transaction: %v", err)
 	}

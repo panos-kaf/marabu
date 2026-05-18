@@ -27,12 +27,11 @@ type ValidationResult struct {
 
 func (m *Manager) ValidateObject(obj types.Object) ValidationResult {
 
-	objIDstr, err := crypto.HashObject(obj)
+	// retrieve or calculate and cache the object ID
+	objID, err := crypto.GetObjectID(obj)
 	if err != nil {
 		return ValidationResult{ErrorCode: types.E_INTERNAL_ERROR, Error: fmt.Errorf("Failed to hash object: %v", err)}
 	}
-
-	objID := types.HashID(objIDstr)
 
 	var result ValidationResult
 
@@ -98,7 +97,7 @@ func (m *Manager) ValidateTransaction(tx *types.Transaction) ValidationResult {
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				result.ErrorCode = types.E_UNKNOWN_OBJECT
-				
+
 				result.MissingID = outpoint.Txid
 
 				result.Error = fmt.Errorf("Referenced transaction %s for input %d does not exist", outpoint.Txid, i)
@@ -182,7 +181,7 @@ func (m *Manager) ValidateBlock(blk *types.Block) ValidationResult {
 		return result
 	}
 
-	blockid, err := crypto.HashObject(blk)
+	blockid, err := crypto.GetObjectID(blk)
 	if err != nil {
 		result.ErrorCode = types.E_INTERNAL_ERROR
 		result.Error = fmt.Errorf("Failed to hash block for validation: %v", err)
@@ -190,9 +189,6 @@ func (m *Manager) ValidateBlock(blk *types.Block) ValidationResult {
 	}
 
 	isValid, err := crypto.VerifyPoW(blockid)
-
-	// REMOVE THIS AFTER TESTING
-	// isValid = true // TEMPORARY: Disable PoW verification for testing
 
 	if err != nil {
 		result.ErrorCode = types.E_INTERNAL_ERROR
@@ -299,7 +295,7 @@ func (m *Manager) ValidateBlock(blk *types.Block) ValidationResult {
 		case *types.CoinbaseTransaction:
 			hasCoinbase = true
 			cbTx = t
-			id, _ := crypto.HashObject(cbTx)
+			id, _ := crypto.GetObjectID(cbTx)
 			cbID = types.HashID(id)
 
 			if index != 0 {

@@ -23,6 +23,7 @@ type Miner struct {
 	Pubkey     types.HashID
 	Agent      types.BuString
 	StudentIDs types.BuStrings
+	Note       types.BuString
 }
 
 func NewMiner(manager *core.Manager, pubkey types.HashID) *Miner {
@@ -31,10 +32,11 @@ func NewMiner(manager *core.Manager, pubkey types.HashID) *Miner {
 		Pubkey:     pubkey,
 		Agent:      manager.Config().AgentName,
 		StudentIDs: manager.Config().StudentIDs,
+		Note:       manager.Config().Note,
 	}
 }
 
-func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTransaction, error) {
+func (m *Miner) BuildBlock() (*types.Block, *types.CoinbaseTransaction, error) {
 
 	timestamp := types.BuInt(time.Now().Unix())
 
@@ -88,7 +90,7 @@ func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTr
 	if res.Error != nil {
 		return nil, nil, fmt.Errorf("miner generated invalid coinbase: %v", res.Error)
 	}
-	coinbaseHashStr, err := crypto.HashObject(coinbase)
+	coinbaseHashStr, err := crypto.GetObjectID(&coinbase)
 	if err != nil {
 		return nil, nil, fmt.Errorf("miner failed to commit coinbase: %v", err)
 	}
@@ -96,7 +98,7 @@ func (m *Miner) BuildBlock(note types.BuString) (*types.Block, *types.CoinbaseTr
 	txids[0] = types.HashID(coinbaseHashStr)
 	block.Txids = txids
 
-	block.Note = &note
+	block.Note = &m.Note
 
 	return &block, &coinbase, nil
 
@@ -179,7 +181,7 @@ func (m *Miner) Mine(ctx context.Context) error {
 
 	target := types.TARGET_BIGINT()
 
-	block, coinbase, err := m.BuildBlock(types.BuString("a noteworthy note"))
+	block, coinbase, err := m.BuildBlock()
 	if err != nil {
 		logs.GlobalError(fmt.Sprintf("Miner failed to build block template: %v", err))
 		return err
@@ -235,7 +237,7 @@ func (m *Miner) Mine(ctx context.Context) error {
 		block.Nonce = types.Nonce(winningNonce)
 	}
 
-	finalHash, _ := crypto.HashObject(block)
+	finalHash, _ := crypto.GetObjectID(block)
 	logs.GlobalLog(fmt.Sprintf("Found nonce for block %s!", finalHash))
 
 	m.Manager.StoreObject(coinbase)
