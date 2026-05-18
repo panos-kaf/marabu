@@ -63,7 +63,24 @@ func BlockRewardBigInt() *big.Int {
 	return new(big.Int).SetUint64(BLOCK_REWARD_UINT64)
 }
 
+// wrapper for big.Int Add method
 func (p Picabu) Add(other Picabu) Picabu {
 	sum := new(big.Int).Add((*big.Int)(&p), (*big.Int)(&other))
 	return Picabu(*sum)
+}
+
+// wrapper for big.Int Sub method
+func (p Picabu) Sub(other Picabu) Picabu {
+	diff := new(big.Int).Sub((*big.Int)(&p), (*big.Int)(&other))
+	return Picabu(*diff)
+}
+
+// wrapper for big.Int Cmp method
+func (p Picabu) Cmp(other Picabu) int {
+	return (*big.Int)(&p).Cmp((*big.Int)(&other))
+}
+
+// wrapper for big.Int String method
+func (p Picabu) String() string {
+	return (*big.Int)(&p).String()
 }
