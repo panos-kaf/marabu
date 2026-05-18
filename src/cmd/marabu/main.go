@@ -20,6 +20,7 @@ import (
 	"marabu/internal/peer"
 	"marabu/internal/types"
 	"marabu/internal/ui"
+	"marabu/internal/wallet"
 
 	"github.com/joho/godotenv"
 )
@@ -123,10 +124,12 @@ func main() {
 	go Manager.SyncNodeState(peer.BroadcastGetMempool)
 	go peer.StartServer(Manager)
 
-	Miner := miner.NewMiner(Manager, config.PubKey)
+	Miner := miner.New(Manager, config.PubKey)
 	go Miner.StartMining()
+
+	Wallet := wallet.New(Manager, secretKey, config.PubKey)
 
 	bootstrap.StartNode(Manager)
 
-	ui.Start(Manager)
+	ui.Start(Manager, Wallet)
 }
