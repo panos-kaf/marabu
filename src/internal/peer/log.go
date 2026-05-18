@@ -89,10 +89,15 @@ func (p *Peer) err(mtype types.MessageType, code types.ErrorCode, message string
 	logs.Log(entry)
 }
 
-func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends bool) {
+func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends bool, message string) {
 
 	if p.isMuted() {
 		return
+	}
+
+	dir := types.Recv
+	if sends {
+		dir = types.Sent
 	}
 
 	entry := logs.LogEntry{
@@ -102,13 +107,10 @@ func (p *Peer) logMessage(mtype types.MessageType, code types.ErrorCode, sends b
 		Addr:        cmp.Or(p.agent, p.addr),
 		IsError:     false,
 		Origin:      p.origin,
+		Message:     message,
+		Direction:   dir,
 	}
-	entry.Origin = p.origin
-	if sends {
-		entry.Direction = "sent"
-	} else {
-		entry.Direction = "received"
-	}
+
 	logs.Log(entry)
 }
 
@@ -116,6 +118,11 @@ func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message
 
 	if p.isMuted() {
 		return
+	}
+
+	dir := types.Recv
+	if sends {
+		dir = types.Sent
 	}
 
 	entry := logs.LogEntry{
@@ -126,11 +133,8 @@ func (p *Peer) errMessage(mtype types.MessageType, code types.ErrorCode, message
 		IsError:     true,
 		Message:     message,
 		Origin:      p.origin,
+		Direction:   dir,
 	}
-	if sends {
-		entry.Direction = "sent"
-	} else {
-		entry.Direction = "received"
-	}
+
 	logs.Log(entry)
 }
