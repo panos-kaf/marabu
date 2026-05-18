@@ -113,7 +113,7 @@ func GlobalLog(msg string) {
 		Addr:        "",
 		IsError:     false,
 		Message:     msg,
-		Origin:        "",
+		Origin:      "",
 	}
 	Log(entry)
 }
@@ -126,7 +126,7 @@ func GlobalError(msg string) {
 		Addr:        "",
 		IsError:     true,
 		Message:     msg,
-		Origin:        "",
+		Origin:      "",
 	}
 	Log(entry)
 }
