@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"marabu/internal/core"
+	"marabu/internal/crypto"
 	"marabu/internal/protocol"
 	"marabu/internal/types"
 
@@ -191,7 +192,25 @@ func (p *Peer) handleMessage(raw string) {
 	if msg.MessageType() == types.MSG_ERROR {
 		errCode = msg.(*protocol.Error).Name
 	}
-	p.logMessage(msg.MessageType(), errCode, recv)
+
+	logDetail := ""
+	switch m := msg.(type) {
+	case *protocol.GetObject:
+		logDetail = "ID: " + string(m.ObjectID)
+	case *protocol.IHaveObject:
+		logDetail = "ID: " + string(m.ObjectID)
+	case *protocol.ChainTip:
+		logDetail = "ID: " + string(m.BlockID)
+	case *protocol.Object:
+		hashID, err := crypto.GetObjectID(m.Object)
+		if err == nil {
+			logDetail = "ID: " + string(hashID)
+		} else {
+			logDetail = "ID: [Error calculating hash]"
+		}
+	}
+
+	p.logMessage(msg.MessageType(), errCode, recv, logDetail)
 
 	if !p.handshakeComplete && msg.MessageType() != types.MSG_HELLO {
 		p.errMessage(msg.MessageType(), types.E_NONE, "Failed handshake.Expected hello message first", false)

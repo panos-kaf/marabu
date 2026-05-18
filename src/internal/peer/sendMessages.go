@@ -2,6 +2,7 @@ package peer
 
 import (
 	"fmt"
+	"marabu/internal/crypto"
 	"marabu/internal/protocol"
 	"marabu/internal/types"
 	"sync"
@@ -17,7 +18,7 @@ const (
 // SendMessage sends a message to the peer.
 // Not a top level function, intended to be paired with message constructors like protocol.MakeHello().
 // If mkErr is not nil, it returns that error instead of sending the message.
-func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string, mkerr error) error {
+func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string, mkerr error, log string) error {
 	if mkerr != nil {
 		return fmt.Errorf("Failed to create %s message: %w", t, mkerr)
 	}
@@ -32,7 +33,7 @@ func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string
 		return fmt.Errorf("Failed to send %s message: %w", t, err)
 	}
 
-	p.logMessage(t, code, sent)
+	p.logMessage(t, code, sent, log)
 
 	return nil
 }
@@ -64,7 +65,7 @@ func Broadcast(t types.MessageType, code types.ErrorCode, msg string, mkErr erro
 		go func(p *Peer) {
 			defer wg.Done()
 
-			if err := p.SendMessage(t, code, msg, nil); err != nil {
+			if err := p.SendMessage(t, code, msg, nil, ""); err != nil {
 				p.errInfo(fmt.Sprintf("Failed to broadcast %s message to %s: %v", t, p.addr, err))
 				hasErrors.Store(true)
 			}
@@ -89,57 +90,65 @@ func (p *Peer) SendHello() error {
 	agent := types.BuString(p.Manager.Config().AgentName)
 
 	msg, err := protocol.MakeHello(&agent)
-	return p.SendMessage(types.MSG_HELLO, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_HELLO, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendError(name types.ErrorCode, description string) error {
 	msg, err := protocol.MakeError(name, types.BuString(description))
-	return p.SendMessage(types.MSG_ERROR, name, msg, err)
+	return p.SendMessage(types.MSG_ERROR, name, msg, err, "")
 }
 
 func (p *Peer) SendGetPeers() error {
 	msg, err := protocol.MakeGetPeers()
-	return p.SendMessage(types.MSG_GETPEERS, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_GETPEERS, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendPeers(peers types.Peers) error {
 	msg, err := protocol.MakePeers(peers)
-	return p.SendMessage(types.MSG_PEERS, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_PEERS, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendGetObject(objectID types.HashID) error {
 	msg, err := protocol.MakeGetObject(objectID)
-	return p.SendMessage(types.MSG_GETOBJECT, types.E_NONE, msg, err)
+
+	logDetail := "ID: " + string(objectID)
+	return p.SendMessage(types.MSG_GETOBJECT, types.E_NONE, msg, err, logDetail)
 }
 
 func (p *Peer) SendIHaveObject(objectID types.HashID) error {
 	msg, err := protocol.MakeIHaveObject(objectID)
-	return p.SendMessage(types.MSG_IHAVEOBJECT, types.E_NONE, msg, err)
+
+	logDetail := "ID: " + string(objectID)
+	return p.SendMessage(types.MSG_IHAVEOBJECT, types.E_NONE, msg, err, logDetail)
 }
 
 func (p *Peer) SendObject(obj types.Object) error {
 	msg, err := protocol.MakeObject(obj)
-	return p.SendMessage(types.MSG_OBJECT, types.E_NONE, msg, err)
+
+	hashID, _ := crypto.GetObjectID(obj)
+	logDetail := "ID: " + string(hashID)
+
+	return p.SendMessage(types.MSG_OBJECT, types.E_NONE, msg, err, logDetail)
 }
 
 func (p *Peer) SendGetMempool() error {
 	msg, err := protocol.MakeGetMempool()
-	return p.SendMessage(types.MSG_GETMEMPOOL, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_GETMEMPOOL, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendMempool(txIDs []types.HashID) error {
 	msg, err := protocol.MakeMempool(txIDs)
-	return p.SendMessage(types.MSG_MEMPOOL, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_MEMPOOL, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendGetChainTip() error {
 	msg, err := protocol.MakeGetChainTip()
-	return p.SendMessage(types.MSG_GETCHAINTIP, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_GETCHAINTIP, types.E_NONE, msg, err, "")
 }
 
 func (p *Peer) SendChainTip(chainTip types.HashID) error {
 	msg, err := protocol.MakeChainTip(chainTip)
-	return p.SendMessage(types.MSG_CHAINTIP, types.E_NONE, msg, err)
+	return p.SendMessage(types.MSG_CHAINTIP, types.E_NONE, msg, err, string(chainTip))
 }
 
 func (p *Peer) Greet() {
