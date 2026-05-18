@@ -185,7 +185,7 @@ func testUnknownObject(p *Peer) {
 		},
 	}
 
-	p.send(must(protocol.MakeObject(tx)))
+	p.send(must(protocol.MakeObject(&tx)))
 	expectError(p, "UNKNOWN_OBJECT")
 }
 
@@ -219,7 +219,7 @@ func testInvalidSignature(p *Peer, coinbaseID types.HashID) {
 		},
 	}
 
-	p.send(must(protocol.MakeObject(tx)))
+	p.send(must(protocol.MakeObject(&tx)))
 	expectError(p, "INVALID_TX_SIGNATURE")
 }
 
@@ -242,7 +242,7 @@ func testInvalidOutpoint(p *Peer, coinbaseID types.HashID) {
 		},
 	}
 
-	p.send(must(protocol.MakeObject(tx)))
+	p.send(must(protocol.MakeObject(&tx)))
 	expectError(p, "INVALID_TX_OUTPOINT")
 }
 
@@ -266,7 +266,7 @@ func testConservation(p *Peer, coinbaseID types.HashID, sig types.Signature) {
 		},
 	}
 
-	p.send(must(protocol.MakeObject(tx)))
+	p.send(must(protocol.MakeObject(&tx)))
 	expectError(p, "INVALID_TX_CONSERVATION")
 }
 
@@ -313,9 +313,9 @@ func main() {
 		},
 	}
 
-	coinbaseIDstr, _ := crypto.HashObject(coinbase)
+	coinbaseIDstr, _ := crypto.HashObject(&coinbase)
 	coinbaseID := types.HashID(coinbaseIDstr)
-	coinbaseMsg := must(protocol.MakeObject(coinbase))
+	coinbaseMsg := must(protocol.MakeObject(&coinbase))
 
 	p1.send(coinbaseMsg)
 

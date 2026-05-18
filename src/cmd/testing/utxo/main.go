@@ -96,8 +96,8 @@ func main() {
 		Outputs: types.TxOutputs{
 			{Pubkey: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", Value: &tooMuch}},
 	}
-	cb1Msg := must(protocol.MakeObject(cb1))
-	cb1IDstr, _ := crypto.HashObject(cb1)
+	cb1Msg := must(protocol.MakeObject(&cb1))
+	cb1IDstr, _ := crypto.HashObject(&cb1)
 
 	blk1 := types.Block{
 		Type:    types.OBJ_BLOCK,
@@ -110,7 +110,7 @@ func main() {
 
 	send(conn, cb1Msg)
 	time.Sleep(100 * time.Millisecond)
-	send(conn, must(protocol.MakeObject(blk1)))
+	send(conn, must(protocol.MakeObject(&blk1)))
 
 	resp = waitForSpecificError(reader, 2*time.Second, conn, "INVALID_BLOCK_COINBASE", "")
 	if strings.Contains(resp, "INVALID_BLOCK_COINBASE") {
@@ -128,8 +128,8 @@ func main() {
 		Type: types.OBJ_TRANSACTION, Height: &h,
 		Outputs: types.TxOutputs{{Pubkey: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", Value: &validAmount}},
 	}
-	cbValidMsg := must(protocol.MakeObject(cbValid))
-	cbValidIDstr, _ := crypto.HashObject(cbValid)
+	cbValidMsg := must(protocol.MakeObject(&cbValid))
+	cbValidIDstr, _ := crypto.HashObject(&cbValid)
 	cbID := types.HashID(cbValidIDstr)
 
 	blk2 := types.Block{
@@ -139,7 +139,7 @@ func main() {
 
 	send(conn, cbValidMsg)
 	time.Sleep(100 * time.Millisecond)
-	send(conn, must(protocol.MakeObject(blk2)))
+	send(conn, must(protocol.MakeObject(&blk2)))
 
 	// It might throw INVALID_BLOCK_COINBASE or INVALID_TX_OUTPOINT if it processes it weirdly.
 	resp = waitForSpecificError(reader, 2*time.Second, conn, "INVALID_BLOCK_COINBASE", "")
@@ -161,8 +161,8 @@ func main() {
 		Inputs:  types.TxInputs{{Outpoint: types.Outpoint{Txid: cbID, Index: &outIndex}, Sig: &dummySig}},
 		Outputs: types.TxOutputs{{Pubkey: "0987654321fedcba0987654321fedcba0987654321fedcba0987654321fedcba", Value: &validAmount}},
 	}
-	illegalTxMsg := must(protocol.MakeObject(illegalTx))
-	illegalTxIDstr, _ := crypto.HashObject(illegalTx)
+	illegalTxMsg := must(protocol.MakeObject(&illegalTx))
+	illegalTxIDstr, _ := crypto.HashObject(&illegalTx)
 
 	blk3 := types.Block{
 		Type: types.OBJ_BLOCK, T: dummyTarget, Nonce: types.Nonce(dummyTarget), Previd: prevID, Created: types.BuInt(time.Now().Unix()),
@@ -172,7 +172,7 @@ func main() {
 	send(conn, cbValidMsg)
 	send(conn, illegalTxMsg)
 	time.Sleep(100 * time.Millisecond)
-	send(conn, must(protocol.MakeObject(blk3)))
+	send(conn, must(protocol.MakeObject(&blk3)))
 
 	resp = waitForSpecificError(reader, 2*time.Second, conn, "INVALID_TX_OUTPOINT", "INVALID_TX_SIGNATURE")
 	if strings.Contains(resp, "INVALID_TX_OUTPOINT") || strings.Contains(resp, "INVALID_TX_SIGNATURE") {
@@ -196,7 +196,7 @@ func main() {
 		Txids:   types.HashIDs{fakeTxID},
 	}
 
-	send(conn, must(protocol.MakeObject(blkFakeTx)))
+	send(conn, must(protocol.MakeObject(&blkFakeTx)))
 
 	// Wait for the 5-second timeout
 	resp = waitForSpecificError(reader, 8*time.Second, conn, "UNFINDABLE_OBJECT", "unfindable")

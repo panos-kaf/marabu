@@ -89,9 +89,9 @@ func main() {
 			},
 		},
 	}
-	coinbaseIDstr, _ := crypto.HashObject(coinbaseTx)
+	coinbaseIDstr, _ := crypto.HashObject(&coinbaseTx)
 	coinbaseID := types.HashID(coinbaseIDstr)
-	coinbaseMsg, _ := protocol.MakeObject(coinbaseTx)
+	coinbaseMsg, _ := protocol.MakeObject(&coinbaseTx)
 	fmt.Println("\n--- Coinbase types.Transaction Exchange ---")
 	fmt.Printf("Coinbase object message:\n%s\n\n", coinbaseMsg)
 	exchangeObject(coinbaseID, coinbaseMsg, conn, resp)
@@ -119,9 +119,9 @@ func main() {
 		Outputs: []types.TxOutput{output},
 	}
 
-	regularIDstr, _ := crypto.HashObject(regularTx)
+	regularIDstr, _ := crypto.HashObject(&regularTx)
 	regularID := types.HashID(regularIDstr)
-	regularMsg, _ := protocol.MakeObject(regularTx)
+	regularMsg, _ := protocol.MakeObject(&regularTx)
 	fmt.Println("\n--- Regular types.Transaction Exchange ---")
 	fmt.Printf("Regular object message:\n%s\n\n", regularMsg)
 	exchangeObject(regularID, regularMsg, conn, resp)
