@@ -9,25 +9,14 @@ import (
 	"time"
 )
 
-// ANSI Color Codes for the CLI
-const (
-	reset   = "\033[0m"
-	bold    = "\033[1m"
-	red     = "\033[31m"
-	green   = "\033[32m"
-	yellow  = "\033[33m"
-	blue    = "\033[34m"
-	magenta = "\033[35m"
-	cyan    = "\033[36m"
-	white   = "\033[37m"
-)
-
 func printHelp() {
 	fmt.Printf("\n%sAvailable commands:%s\n", bold+yellow, reset)
 	fmt.Printf("  %sinfo, i, status%s         - Show node diagnostics and chaintip\n", cyan, reset)
 	fmt.Printf("  %sid, identity, miner%s     - Show node identity, agent, and student IDs\n", cyan, reset)
 	fmt.Printf("  %speers, p%s                - List detailed connected peers\n", cyan, reset)
 	fmt.Printf("  %sconnect <ip:port>%s       - Manually connect to a node\n", cyan, reset)
+	fmt.Printf("  %sbalance%s                 - Show wallet balance and UTXOs\n", cyan, reset)
+	fmt.Printf("  %ssend <pubkey> <amount> [fee]%s - Send funds to a public key (amount in Picabus, fee optional)\n", cyan, reset)
 	fmt.Printf("  %sdisconnect <ip:port>%s    - Disconnect from a node (alias: drop)\n", cyan, reset)
 	fmt.Printf("  %smute <ip|agent> <val>%s   - Mute logs from a spammy IP or Agent\n", cyan, reset)
 	fmt.Printf("  %sunmute <ip|agent> <val>%s - Unmute logs\n", cyan, reset)
@@ -36,6 +25,8 @@ func printHelp() {
 	fmt.Printf("  %sbanned%s                  - List all currently banned targets\n", cyan, reset)
 	fmt.Printf("  %sobjects, o%s              - List all objects in the database\n", cyan, reset)
 	fmt.Printf("  %sget <hash>%s              - Fetch and display a specific object\n", cyan, reset)
+	fmt.Printf("  %snote%s                    - Show current miner note\n", cyan, reset)
+	fmt.Printf("  %snote set%s				  - Set a custom miner note\n", cyan, reset)
 	fmt.Printf("  %scores, c <num>%s          - Adjust the number of CPU cores used for mining\n", cyan, reset)
 	fmt.Printf("  %ssync%s                    - Force broadcast GetPeers and GetChainTip\n", cyan, reset)
 	fmt.Printf("  %sexit, quit, q%s           - Exit the CLI\n\n", cyan, reset)

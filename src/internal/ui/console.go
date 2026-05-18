@@ -11,11 +11,27 @@ import (
 	"strings"
 
 	"marabu/internal/core"
+	"marabu/internal/crypto"
 	"marabu/internal/peer"
 	"marabu/internal/types"
+	"marabu/internal/utils"
+	"marabu/internal/wallet"
 )
 
-func Start(manager *core.Manager) {
+// ANSI Color Codes for the CLI
+const (
+	reset   = "\033[0m"
+	bold    = "\033[1m"
+	red     = "\033[31m"
+	green   = "\033[32m"
+	yellow  = "\033[33m"
+	blue    = "\033[34m"
+	magenta = "\033[35m"
+	cyan    = "\033[36m"
+	white   = "\033[37m"
+)
+
+func Start(manager *core.Manager, wallet *wallet.Wallet) {
 	fmt.Print("\033[2J")
 	go startLivePanel(manager)
 	fmt.Print("\033[7;1H")
@@ -36,11 +52,11 @@ func Start(manager *core.Manager) {
 			continue
 		}
 
-		executeCommand(strings.ToLower(args[0]), args, manager)
+		executeCommand(strings.ToLower(args[0]), args, manager, wallet)
 	}
 }
 
-func executeCommand(cmd string, args []string, manager *core.Manager) {
+func executeCommand(cmd string, args []string, manager *core.Manager, wallet *wallet.Wallet) {
 	switch cmd {
 	case "help", "?", "h":
 		printHelp()
@@ -175,6 +191,88 @@ func executeCommand(cmd string, args []string, manager *core.Manager) {
 				fmt.Printf("%sCurrent note:%s %s\n", cyan, reset, note)
 			}
 		}
+
+	case "alias":
+		if len(args) < 2 {
+			fmt.Println("Usage:")
+			fmt.Println("  alias add <name> <pubkey>")
+			fmt.Println("  alias list")
+			return
+		}
+
+		switch args[1] {
+		case "add":
+			if len(args) != 4 {
+				fmt.Println("Usage: alias add <name> <pubkey>")
+				return
+			}
+			name := args[2]
+			pubkey := types.HashID(args[3])
+			wallet.AddAlias(name, pubkey)
+			fmt.Printf("Alias saved: %s -> %s\n", name, pubkey)
+
+		case "list":
+			aliases := wallet.GetAliases()
+			if len(aliases) == 0 {
+				fmt.Println("Address book is empty.")
+				return
+			}
+			fmt.Println("\n=== Address Book ===")
+			for name, pubkey := range aliases {
+				fmt.Printf("%-10s : %s\n", name, pubkey)
+			}
+			fmt.Println("====================")
+		}
+
+	case "sweep":
+		fmt.Printf("Scanning the blockchain for unknown public keys...\n")
+		found := wallet.AutoAliasUTXOs()
+		fmt.Printf("Sweep complete. Found and aliased %d new unique public keys.\n", found)
+		fmt.Printf("Type 'alias list' to see them!\n")
+
+	case "balance":
+		balance, utxos := wallet.GetBalance()
+
+		// Convert Picabus to BU for display
+		buValue := utils.PicabuToBu(balance)
+
+		fmt.Printf("\n=== Wallet Balance ===\n")
+		fmt.Printf("Confirmed UTXOs: %d\n", len(utxos))
+		fmt.Printf("Total Balance:   %.6f BU (%s Picabus)\n", buValue, balance.String())
+		fmt.Printf("======================\n\n")
+
+	case "send":
+		if len(args) != 3 {
+			fmt.Printf("Usage: send <target_pubkey> <amount_in_BU>\n")
+			return
+		}
+
+		targetPubkey := wallet.ResolveAddress(args[1])
+
+		amountBU, err := strconv.ParseFloat(args[2], 64)
+		if err != nil || amountBU <= 0 {
+			fmt.Printf("Error: Amount must be a positive number.\n")
+			return
+		}
+
+		// Convert BU to Picabu
+		amountPicabu := utils.BuToPicabu(amountBU)
+
+		// Set a flat network fee (e.g., 0.001 BU)
+		feePicabu := types.NewPicabu(uint64(0.001 * 1_000_000_000_000))
+
+		fmt.Printf("Building transaction...\n")
+
+		tx, err := wallet.SendPicabus(targetPubkey, amountPicabu, feePicabu)
+		if err != nil {
+			fmt.Printf("Transaction Failed: %v\n", err)
+			return
+		}
+
+		// Safely get the ID using our smart wrapper!
+		txid, _ := crypto.GetObjectID(tx)
+		fmt.Printf("Transaction broadcasted successfully!\n")
+		fmt.Printf("TXID: %s\n", txid)
 
 	case "objects", "o":
 		listObjects(manager)
