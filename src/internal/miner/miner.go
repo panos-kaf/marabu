@@ -26,7 +26,7 @@ type Miner struct {
 	Note       types.BuString
 }
 
-func NewMiner(manager *core.Manager, pubkey types.HashID) *Miner {
+func New(manager *core.Manager, pubkey types.HashID) *Miner {
 	return &Miner{
 		Manager:    manager,
 		Pubkey:     pubkey,
