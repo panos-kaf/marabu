@@ -33,7 +33,7 @@ func (p *Peer) handleHello(msg *protocol.Hello) {
 }
 
 func (p *Peer) handleError(msg *protocol.Error) {
-	p.log(msg.Type, msg.Name, "peer: "+p.Name()+", description: "+string(msg.Description))
+	p.log(msg.Type, msg.Name, "Description: "+string(msg.Description))
 }
 
 func (p *Peer) handleGetPeers() {
@@ -55,7 +55,7 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 	ID := msg.ObjectID
 	mtype := msg.Type
 
-	p.log(mtype, types.E_NONE, p.Name()+" requested object: "+string(ID))
+	// p.log(mtype, types.E_NONE, p.Name()+" requested object: "+string(ID))
 
 	obj, err := p.Manager.GetObject(ID)
 
@@ -72,8 +72,6 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 		return
 	}
 
-	p.log(mtype, types.E_NONE, "We have object "+string(ID)+", sending it to peer "+p.addr)
-
 	if err := p.SendObject(obj); err != nil {
 		p.err(mtype, types.E_NONE, "Error sending object: "+err.Error())
 	}
@@ -82,7 +80,6 @@ func (p *Peer) handleGetObject(msg *protocol.GetObject) {
 func (p *Peer) handleIHaveObject(msg *protocol.IHaveObject) {
 
 	ID := msg.ObjectID
-	p.log(msg.Type, types.E_NONE, p.Name()+" has object with ID: "+string(ID))
 
 	exists, e := p.Manager.ExistsObject(ID)
 	if e != nil {
@@ -90,7 +87,7 @@ func (p *Peer) handleIHaveObject(msg *protocol.IHaveObject) {
 		return
 	}
 	if exists {
-		p.log(msg.Type, types.E_NONE, "We already have object "+string(ID))
+		// p.log(msg.Type, types.E_NONE, "We already have object "+string(ID))
 	} else {
 		p.log(msg.Type, types.E_NONE, "We do not have object "+string(ID)+", requesting it from "+p.Name())
 		err := p.SendGetObject(ID)
@@ -134,13 +131,16 @@ func (p *Peer) handleGetMempool() {
 func (p *Peer) handleMempool(msg *protocol.Mempool) {
 
 	for _, txid := range msg.Txids {
-		if exists, err := p.Manager.ExistsObject(txid); err != nil {
+		exists, err := p.Manager.ExistsObject(txid)
+		if err != nil {
 			p.err(types.MSG_MEMPOOL, types.E_NONE, "Error checking if mempool transaction exists: "+err.Error())
 			continue
 		} else if exists {
-			p.log(types.MSG_MEMPOOL, types.E_NONE, "We already have mempool transaction "+string(txid))
+			// p.log(types.MSG_MEMPOOL, types.E_NONE, "We already have mempool transaction "+string(txid))
 			continue
 		}
+
+		p.log(types.MSG_MEMPOOL, types.E_NONE, "We do not have mempool transaction "+string(txid)+", requesting it from "+p.Name())
 
 		// only ask the peer that has the mempool
 		p.SendGetObject(txid)
@@ -149,7 +149,7 @@ func (p *Peer) handleMempool(msg *protocol.Mempool) {
 
 func (p *Peer) handleGetChainTip() {
 
-	p.log(types.MSG_GETCHAINTIP, types.E_NONE, p.Name()+" requested chain tip")
+	// p.log(types.MSG_GETCHAINTIP, types.E_NONE, p.Name()+" requested chain tip")
 
 	tip, _, err := p.Manager.GetChaintip()
 	if err != nil {
@@ -165,7 +165,7 @@ func (p *Peer) handleGetChainTip() {
 		return
 	}
 
-	p.log(types.MSG_GETCHAINTIP, types.E_NONE, "Sending chain tip "+string(tip)+" to "+p.Name())
+	// p.log(types.MSG_GETCHAINTIP, types.E_NONE, "Sending chain tip "+string(tip)+" to "+p.Name())
 
 	err = p.SendChainTip(tip)
 	if err != nil {
@@ -175,7 +175,7 @@ func (p *Peer) handleGetChainTip() {
 
 func (p *Peer) handleChainTip(msg *protocol.ChainTip) {
 
-	p.log(msg.Type, types.E_NONE, p.Name()+" sent chain tip: "+string(msg.BlockID))
+	// p.log(msg.Type, types.E_NONE, p.Name()+" sent chain tip: "+string(msg.BlockID))
 
 	if !p.sentChainTip {
 		p.sentChainTip = true
