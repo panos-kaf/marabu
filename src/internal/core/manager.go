@@ -50,6 +50,8 @@ func NewManager(config NodeConfig) *Manager {
 
 	m := &Manager{db: db, config: config}
 
+	config.Note = types.BuString("a noteworthy node") // Default note, can be updated in the CLI
+
 	m.isSynced.Store(false)
 
 	return m
@@ -165,6 +167,8 @@ func (m *Manager) commitBlock(blk *types.Block, result ValidationResult) (bool, 
 		for _, txid := range blk.Txids {
 			m.RemoveFromMempool(txid)
 		}
+
+		m.CleanMempool()
 	}
 
 	return true, types.E_NONE, nil // Always gossip valid blocks
@@ -296,6 +300,40 @@ func (m *Manager) RemoveFromMempool(txid types.HashID) error {
 
 func (m *Manager) ExistsInMempool(txid types.HashID) (bool, error) {
 	return m.db.existsInMempool(txid)
+}
+
+func (m *Manager) CleanMempool() {
+
+	m.db.mempoolMutex.Lock()
+	defer m.db.mempoolMutex.Unlock()
+
+	tip, _, err := m.GetChaintip()
+	if err != nil {
+		return
+	}
+	activeUTXOs, err := m.GetUTXO(tip)
+	if err != nil {
+		return
+	}
+
+	for txid, tx := range m.db.mempool {
+		isValid := true
+
+		for _, input := range tx.Tx.Inputs {
+			outpoint := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+
+			// If the UTXO it's trying to spend is gone, this tx is dead.
+			if _, exists := activeUTXOs.UTXOs[outpoint]; !exists {
+				isValid = false
+				break
+			}
+		}
+
+		if !isValid {
+			logs.GlobalLog(fmt.Sprintf("[MEMPOOL] Evicting stale/conflicting transaction: %s\n", txid))
+			delete(m.db.mempool, txid)
+		}
+	}
 }
 
 func (m *Manager) GetMempoolEntries() []MempoolEntry {
@@ -488,8 +526,7 @@ func (m *Manager) SetMiningCores(cores int) {
 	m.config.MiningCores = cores
 	m.configMutex.Unlock()
 
-	// THE MAGIC TRICK:
-	// Instantly kill the current mining job so it restarts with the new core count!
+	// Instantly kill the current mining job so it restarts with the new core count
 	if m.minerCancel != nil {
 		m.minerCancel()
 	}
