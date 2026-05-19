@@ -13,6 +13,7 @@ import (
 	"marabu/internal/types"
 	"marabu/internal/utils"
 	"math/big"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/blake2s"
@@ -40,18 +41,26 @@ func (m *Miner) BuildBlock() (*types.Block, *types.CoinbaseTransaction, error) {
 
 	timestamp := types.BuInt(time.Now().Unix())
 
+	config := m.Manager.Config()
+
 	var block types.Block
 
 	block.Type = types.OBJ_BLOCK
 	block.T = types.TARGET
 
-	if m.Agent != "" {
-		block.Miner = &m.Agent
+	if config.AgentName != "" {
+		block.Miner = &config.AgentName
 	}
 
-	if len(m.StudentIDs) > 0 {
-		block.Studentids = &m.StudentIDs
+	if len(config.StudentIDs) > 0 {
+		block.Studentids = &config.StudentIDs
 	}
+
+	if config.Note != "" {
+		block.Note = &config.Note
+	}
+
+	block.Created = timestamp
 
 	block.Created = timestamp
 
@@ -212,9 +221,21 @@ func (m *Miner) Mine(ctx context.Context) error {
 	resultCh := make(chan string)
 	hashTracker := make(chan uint64, numCores*2) // Buffered channel for telemetry
 
+	var wg sync.WaitGroup
+
 	for range numCores {
-		go m.mineWorker(workerCtx, templateBytes, nonceOffset, target, resultCh, hashTracker)
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			m.mineWorker(workerCtx, templateBytes, nonceOffset, target, resultCh, hashTracker)
+		}()
 	}
+
+	go func() {
+		wg.Wait()
+		close(hashTracker)
+	}()
 
 	// Start a background telemetry aggregator
 	go func() {
