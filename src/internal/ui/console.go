@@ -52,11 +52,11 @@ func Start(manager *core.Manager, wallet *wallet.Wallet) {
 			continue
 		}
 
-		executeCommand(strings.ToLower(args[0]), args, manager, wallet)
+		executeCommand(strings.ToLower(args[0]), args, manager, wallet, scanner)
 	}
 }
 
-func executeCommand(cmd string, args []string, manager *core.Manager, wallet *wallet.Wallet) {
+func executeCommand(cmd string, args []string, manager *core.Manager, wallet *wallet.Wallet, scanner *bufio.Scanner) {
 	switch cmd {
 	case "help", "?", "h":
 		printHelp()
@@ -170,17 +170,15 @@ func executeCommand(cmd string, args []string, manager *core.Manager, wallet *wa
 		if len(args) >= 2 {
 			if args[1] == "new" || args[1] == "set" {
 				fmt.Printf("%sEnter new note (max 256 chars):%s ", yellow, reset)
-				noteScanner := bufio.NewScanner(os.Stdin)
-				if noteScanner.Scan() {
-					newNote := noteScanner.Text()
+
+				if scanner.Scan() {
+					newNote := scanner.Text()
 					if len(newNote) > 256 {
 						fmt.Printf("%sError: Note cannot exceed 256 characters.%s\n", red, reset)
 						return
 					}
 					manager.SetNote(types.BuString(newNote))
 					fmt.Printf("%sNote updated successfully.%s\n", green, reset)
-				} else {
-					fmt.Printf("%sError reading note input.%s\n", red, reset)
 				}
 			}
 		} else {
