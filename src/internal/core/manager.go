@@ -48,9 +48,11 @@ func NewManager(config NodeConfig) *Manager {
 		panic(fmt.Errorf("failed to create database: %v", err))
 	}
 
-	m := &Manager{db: db, config: config}
+	if config.Note == "" {
+		config.Note = types.BuString("a noteworthy note") // Default note, can be updated in the CLI
+	}
 
-	config.Note = types.BuString("a noteworthy node") // Default note, can be updated in the CLI
+	m := &Manager{db: db, config: config}
 
 	m.isSynced.Store(false)
 
@@ -331,6 +333,12 @@ func (m *Manager) CleanMempool() {
 
 		if !isValid {
 			logs.GlobalLog(fmt.Sprintf("[MEMPOOL] Evicting stale/conflicting transaction: %s\n", txid))
+
+			for _, input := range tx.Tx.Inputs {
+				outpoint := OutpointKey{Txid: input.Outpoint.Txid, Index: int(*input.Outpoint.Index)}
+				delete(m.db.mempoolSpentInputs, outpoint)
+			}
+
 			delete(m.db.mempool, txid)
 		}
 	}
