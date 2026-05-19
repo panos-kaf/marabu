@@ -23,6 +23,13 @@ type NodeConfig struct {
 	PubKey      types.HashID
 }
 
+type MinedBlockStat struct {
+	Hash      types.HashID
+	Height    uint64
+	Reward    types.Picabu
+	Timestamp time.Time
+}
+
 type Manager struct {
 	db *database
 
@@ -35,6 +42,9 @@ type Manager struct {
 	miningActive atomic.Bool
 	miningStart  atomic.Int64
 	miningHashes atomic.Uint64
+
+	sessionBlocks      []MinedBlockStat
+	sessionBlocksMutex sync.RWMutex
 
 	configMutex sync.RWMutex // Protects the config at runtimes
 	config      NodeConfig
@@ -566,4 +576,75 @@ func (m *Manager) GetMiningStats() (active bool, elapsed time.Duration, hashrate
 	}
 
 	return active, elapsed, hashrate
+}
+
+type MiningStats struct {
+	BlocksMined int
+	TotalReward types.Picabu
+}
+
+func (m *Manager) GetMiningHistory(targetPubkey types.HashID) (MiningStats, error) {
+	stats := MiningStats{
+		BlocksMined: 0,
+		TotalReward: types.NewPicabu(0),
+	}
+
+	tip, _, err := m.GetChaintip()
+	if err != nil {
+		return stats, fmt.Errorf("could not find chaintip (is the node synced?)")
+	}
+
+	currHash := tip
+
+	// Walk backwards until we hit Genesis
+	for {
+		obj, err := m.GetObject(currHash)
+		if err != nil {
+			return stats, fmt.Errorf("chain broken at %s: %v", currHash, err)
+		}
+
+		blk, ok := obj.(*types.Block)
+		if !ok {
+			return stats, fmt.Errorf("object %s is not a block", currHash)
+		}
+
+		// The Coinbase is strictly the first transaction in the block
+		if len(blk.Txids) > 0 {
+			cbObj, err := m.GetObject(blk.Txids[0])
+			if err == nil {
+				if cbTx, ok := cbObj.(*types.CoinbaseTransaction); ok {
+					// Check if the target pubkey was the recipient of this block's reward
+					if len(cbTx.Outputs) > 0 && cbTx.Outputs[0].Pubkey == targetPubkey {
+						stats.BlocksMined++
+						stats.TotalReward = stats.TotalReward.Add(*cbTx.Outputs[0].Value)
+					}
+				}
+			}
+		}
+
+		if blk.Previd == nil {
+			break
+		}
+
+		// Move one block down the chain
+		currHash = *blk.Previd
+	}
+
+	return stats, nil
+}
+
+func (m *Manager) AddMinedBlock(stat MinedBlockStat) {
+	m.sessionBlocksMutex.Lock()
+	defer m.sessionBlocksMutex.Unlock()
+	m.sessionBlocks = append(m.sessionBlocks, stat)
+}
+
+func (m *Manager) GetSessionBlocks() []MinedBlockStat {
+	m.sessionBlocksMutex.RLock()
+	defer m.sessionBlocksMutex.RUnlock()
+
+	// Return a copy so the CLI can iterate over it without holding the lock
+	cpy := make([]MinedBlockStat, len(m.sessionBlocks))
+	copy(cpy, m.sessionBlocks)
+	return cpy
 }

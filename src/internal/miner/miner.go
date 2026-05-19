@@ -275,6 +275,15 @@ func (m *Miner) Mine(ctx context.Context) error {
 		return err
 	}
 
+	rewardVal := *coinbase.Outputs[0].Value
+
+	m.Manager.AddMinedBlock(core.MinedBlockStat{
+		Hash:      finalHash,
+		Height:    res.NewHeight,
+		Reward:    rewardVal,
+		Timestamp: time.Now(),
+	})
+
 	if gossip {
 		peer.BroadcastObject(block)
 	}

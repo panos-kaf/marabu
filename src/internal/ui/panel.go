@@ -11,10 +11,8 @@ import (
 )
 
 func startLivePanel(manager *core.Manager) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
 
-	for range ticker.C {
+	renderPanel := func() {
 		// Fetch latest stats
 		icnt, ocnt, bcnt := peer.ConnManager.GetCounts()
 		tip, height, err := manager.GetChaintip()
@@ -28,6 +26,9 @@ func startLivePanel(manager *core.Manager) {
 
 		active, elapsed, hashrate := manager.GetMiningStats()
 		cores := manager.GetMiningCores()
+
+		sessionBlocks := manager.GetSessionBlocks()
+		minedCount := len(sessionBlocks)
 
 		miningStr := fmt.Sprintf("%sIdle (Waiting for network...)%s", yellow, reset)
 
@@ -44,16 +45,27 @@ func startLivePanel(manager *core.Manager) {
 				"\033[K %sPeers:%s %d Total (%s%d In%s | %s%d Out%s | %s%d Ban%s)\n"+
 				"\033[K %sTip:%s   %s%s%s (Height: %s%d%s)\n"+
 				"\033[K %sMiner:%s %s\n"+
+				"\033[K %sMined:%s %s%d blocks this session%s\n"+
 				"\033[K %s==========================%s\n"+
 				"\033[?25h\033[u",
 			bold+cyan, reset,
 			bold, reset, (icnt + ocnt), green, icnt, reset, blue, ocnt, reset, red, bcnt, reset,
 			bold, reset, magenta, tipStr, reset, yellow, height, reset,
 			bold, reset, miningStr,
+			bold, reset, green, minedCount, reset,
 			bold+cyan, reset,
 		)
 
 		fmt.Print(panel)
+	}
+
+	renderPanel()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		renderPanel()
 	}
 }
 
