@@ -23,11 +23,13 @@ func (p *Peer) SendMessage(t types.MessageType, code types.ErrorCode, msg string
 		return fmt.Errorf("Failed to create %s message: %w", t, mkerr)
 	}
 
+	p.networkMutex.Lock()
 	p.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 
 	_, err := p.conn.Write([]byte(msg))
 
 	p.conn.SetWriteDeadline(time.Time{})
+	p.networkMutex.Unlock()
 
 	if err != nil {
 		return fmt.Errorf("Failed to send %s message: %w", t, err)

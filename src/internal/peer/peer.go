@@ -9,6 +9,7 @@ import (
 	"marabu/internal/crypto"
 	"marabu/internal/protocol"
 	"marabu/internal/types"
+	"sync"
 
 	"net"
 	"strconv"
@@ -34,6 +35,7 @@ type Peer struct {
 	isPersistent      bool
 	Manager           *core.Manager
 	sentChainTip      bool
+	networkMutex	  sync.Mutex
 }
 
 // NewPeer creates a new Peer instance for a given network connection.
