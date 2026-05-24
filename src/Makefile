@@ -1,27 +1,31 @@
 BIN=../bin
 MARABU=./cmd/marabu
 
+TOPOLOGIES:= standard no-bootstrap bootstrap-only
+UIS := cli tui headless
+BUILD_TARGETS := $(foreach n,$(TOPOLOGIES),$(foreach u,$(UIS),$(n)-$(u)))
+
+.PHONY: all build tests run
+
 all: build tests
 
-build: standard-cli standard-headless bootstrap-only-cli bootstrap-only-headless no-bootstrap-cli no-bootstrap-headless 
+# This automatically depends on all 9 combinations
+build: $(BUILD_TARGETS)
 
-standard-cli:
-	go build -tags "standard cli" -o $(BIN)/marabu-standard-cli $(MARABU)
+# $* captures the wildcard part (e.g., "no-bootstrap").
+# $(subst -,_,$*) swaps the dash for an underscore for your Go tags!
 
-standard-headless:
-	go build -tags "standard headless" -o $(BIN)/marabu-standard-headless $(MARABU)
+%-cli:
+	go build -tags "$(subst -,_,$*) cli" -o $(BIN)/marabu-$*-cli $(MARABU)
 
-no-bootstrap-cli:
-	go build -tags "no_bootstrap cli" -o $(BIN)/marabu-no-bootstrap-cli $(MARABU)
+%-tui:
+	go build -tags "$(subst -,_,$*) tui" -o $(BIN)/marabu-$*-tui $(MARABU)
 
-no-bootstrap-headless:
-	go build -tags "no_bootstrap headless" -o $(BIN)/marabu-no-bootstrap-headless $(MARABU)
+%-headless:
+	go build -tags "$(subst -,_,$*) headless" -o $(BIN)/marabu-$*-headless $(MARABU)
 
-bootstrap-only-cli:
-	go build -tags "bootstrap_only cli" -o $(BIN)/marabu-bootstrap-only-cli $(MARABU)
 
-bootstrap-only-headless:
-	go build -tags "bootstrap_only headless" -o $(BIN)/marabu-bootstrap-only-headless $(MARABU)
+# --- Testing & Execution ---
 
 tests: test-obj test-obj-simple test-pset2 test-utxo
 
