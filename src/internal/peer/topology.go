@@ -100,7 +100,7 @@ func churnRandomPeer() {
 }
 
 func replenishOutbound(Manager *core.Manager) {
-	_, outbound, _ := ConnManager.GetCounts()
+	_, outbound, _, _ := ConnManager.GetCounts()
 
 	if outbound >= MaxOutbound {
 		return

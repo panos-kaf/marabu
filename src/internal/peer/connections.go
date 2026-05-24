@@ -144,10 +144,10 @@ func (cm *ConnectionManager) GetDisposable() []*Peer {
 }
 
 // GetCounts returns the current stats
-func (cm *ConnectionManager) GetCounts() (inbound, outbound, persistent int) {
+func (cm *ConnectionManager) GetCounts() (inbound, outbound, persistent, banned int) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	return cm.inboundCount, cm.outboundCount, cm.persistentCount
+	return cm.inboundCount, cm.outboundCount, cm.persistentCount, len(cm.bannedPeers)
 }
 
 // Mute spammy peers
